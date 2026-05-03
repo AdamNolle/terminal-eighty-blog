@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs';
 import path, { join } from 'path';
-import { SITE_DIR } from '../../server.js';
 import { parsePost, serializePost } from '../utils/frontmatter.js';
 
+const SITE_DIR = process.env.SITE_DIR || join(process.cwd(), '..', 'site');
 const router = Router();
 const postsDir = join(SITE_DIR, 'content', 'posts');
 
