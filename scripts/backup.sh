@@ -32,7 +32,7 @@ gzip -f $BACKUP_REPO_DIR/umami_backup.sql
 echo "Backing up Remark42..."
 docker compose stop remark42
 # BoltDB is a single file, we just copy it
-sudo cp /var/lib/docker/volumes/docker_remark_data/_data/remark.db $BACKUP_REPO_DIR/remark42_backup.db
+sudo cp /var/lib/docker/volumes/terminal-eighty_remark_data/_data/remark.db $BACKUP_REPO_DIR/remark42_backup.db
 # Ensure ownership
 sudo chown $USER:$USER $BACKUP_REPO_DIR/remark42_backup.db
 docker compose start remark42
@@ -40,7 +40,7 @@ docker compose start remark42
 # 4. Backup CMS SQLite DB
 echo "Backing up CMS Auth DB..."
 docker compose stop cms
-sudo cp /var/lib/docker/volumes/docker_cms_data/_data/auth.db $BACKUP_REPO_DIR/cms_auth_backup.db
+sudo cp /var/lib/docker/volumes/terminal-eighty_cms_data/_data/auth.db $BACKUP_REPO_DIR/cms_auth_backup.db
 sudo chown $USER:$USER $BACKUP_REPO_DIR/cms_auth_backup.db
 docker compose start cms
 
