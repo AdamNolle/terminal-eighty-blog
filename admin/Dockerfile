@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
-# Install git for publishing, and procps for health metrics (df, free, etc)
-RUN apk add --no-cache git procps
+# Install git, procps, and build tools needed for better-sqlite3 on Alpine ARM64
+RUN apk add --no-cache git procps python3 make g++
 
 WORKDIR /app
 
