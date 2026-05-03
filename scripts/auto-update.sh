@@ -6,7 +6,7 @@
 # ==============================================================================
 
 # Variables (Adjust if cloned to a different path on the Pi)
-REPO_DIR="/app/terminal-eighty-blog"
+REPO_DIR="/home/adam/terminal-eighty-blog"
 
 # Navigate to repo
 cd "$REPO_DIR" || { echo "Failed to find repo at $REPO_DIR"; exit 1; }
