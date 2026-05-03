@@ -1,0 +1,12 @@
+{{ define "main" }}
+<div class="post-feed">
+    {{ $paginator := .Paginate (where .Site.RegularPages "Section" "posts") }}
+    {{ range $paginator.Pages }}
+        {{ partial "post-card.html" . }}
+    {{ end }}
+</div>
+
+{{ if gt $paginator.TotalPages 1 }}
+    {{ partial "pagination.html" . }}
+{{ end }}
+{{ end }}

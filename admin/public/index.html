@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Terminal Eighty CMS</title>
+    <link rel="stylesheet" href="/css/admin.css">
+    <link rel="manifest" href="/manifest.json">
+    <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="admin-header">
+            <h1>
+                <div class="header-green-box"></div>
+                TERMINAL EIGHTY // ADMIN
+            </h1>
+            <div class="nav-links">
+                <a href="/editor.html" class="btn primary">[+ NEW POST]</a>
+                <button id="btn-publish" class="btn">[PUBLISH SITE]</button>
+                <button id="btn-logout" class="btn">[LOGOUT]</button>
+            </div>
+        </header>
+
+        <div class="dashboard-grid">
+            
+            <!-- Left Column: Posts -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span>[ POSTS ]</span>
+                    <span id="post-count">Loading...</span>
+                </div>
+                <div class="panel-content">
+                    <ul class="post-list" id="post-list-el">
+                        <li>Loading posts...</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Right Column: System & Settings -->
+            <div>
+                <!-- Health Dashboard -->
+                <div class="panel" style="margin-bottom: 30px;">
+                    <div class="panel-header">
+                        <span>[ PI HEALTH ]</span>
+                        <span id="health-uptime">...</span>
+                    </div>
+                    <div class="panel-content">
+                        <!-- CPU -->
+                        <div class="health-stat">
+                            <span class="health-label">CPU</span>
+                            <span class="health-value" id="gauge-val-cpu">0%</span>
+                            <div class="gauge-container">
+                                <div class="gauge-bar" id="gauge-bar-cpu" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <!-- RAM -->
+                        <div class="health-stat">
+                            <span class="health-label">RAM</span>
+                            <span class="health-value" id="gauge-val-ram">0%</span>
+                            <div class="gauge-container">
+                                <div class="gauge-bar" id="gauge-bar-ram" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <!-- Temp -->
+                        <div class="health-stat">
+                            <span class="health-label">TEMP</span>
+                            <span class="health-value" id="gauge-val-temp">0°C</span>
+                            <div style="flex-grow: 1" id="gauge-status-temp">🟢 OK</div>
+                        </div>
+                        <!-- Disk -->
+                        <div class="health-stat" style="margin-bottom: 20px;">
+                            <span class="health-label">DISK</span>
+                            <span class="health-value" id="gauge-val-disk">0%</span>
+                            <div class="gauge-container">
+                                <div class="gauge-bar" id="gauge-bar-disk" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <h4>DOCKER CONTAINERS</h4>
+                        <div class="docker-list" id="docker-list-el">
+                            Loading container status...
+                        </div>
+                        
+                        <h4 style="margin-top: 20px;">BACKUP STATUS</h4>
+                        <div style="font-size: 0.9em; opacity: 0.8;" id="backup-status-el">
+                            Loading...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>[ SECURITY ]</span>
+                    </div>
+                    <div class="panel-content">
+                        <p>Register a passkey to login instantly with Face ID / Touch ID.</p>
+                        <button id="btn-register-passkey" class="primary">Register Passkey on this Device</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="toast" class="toast">Action completed.</div>
+
+    <script src="/js/app.js"></script>
+    <script src="/js/auth.js"></script>
+</body>
+</html>

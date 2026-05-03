@@ -1,0 +1,27 @@
+{
+  "name": "terminal-eighty-cms",
+  "version": "1.0.0",
+  "description": "Admin CMS for Terminal Eighty blog",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "^13.1.1",
+    "bcrypt": "^5.1.1",
+    "better-sqlite3": "^11.7.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "csrf-csrf": "^3.0.6",
+    "express": "^4.21.1",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "gray-matter": "^4.0.3",
+    "multer": "^1.4.5-lts.1",
+    "nanoid": "^5.0.9",
+    "simple-git": "^3.27.0",
+    "uuid": "^10.0.0"
+  }
+}

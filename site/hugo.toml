@@ -1,0 +1,56 @@
+baseURL = "https://terminaleighty.com"
+defaultContentLanguage = "en"
+
+[languages.en]
+  locale = "en-US"
+title = "Terminal Eighty"
+description = "Tech it like I talk (write) it."
+copyright = "Terminal Eighty"
+
+# Pagination
+[pagination]
+  pagerSize = 10
+
+# Taxonomies
+[taxonomies]
+  tag = "tags"
+
+# RSS output
+[outputFormats.RSS]
+  mediaType = "application/rss+xml"
+  baseName = "index"
+
+[outputs]
+  home = ["HTML", "RSS"]
+
+# Permalinks
+[permalinks]
+  posts = "/:slug/"
+
+# Markup
+[markup.goldmark.renderer]
+  unsafe = true
+
+[markup.highlight]
+  noClasses = false
+
+# Site params
+[params]
+  tagline = "Tech it like I talk (write) it."
+  author = "Terminal Eighty"
+  postsPerPage = 10
+  # Remark42 configuration
+  remark42URL = "https://comments.terminaleighty.com"
+  remark42SiteID = "terminaleighty"
+  # Umami analytics
+  umamiURL = "https://analytics.terminaleighty.com"
+  umamiSiteID = ""  # Fill after Umami setup
+  # Social
+  youtubeURL = "https://www.youtube.com/@TerminalEighty"
+  rssURL = "/index.xml"
+
+# Menu
+[[menus.main]]
+  name = "[CONNECT]"
+  url = "/connect/"
+  weight = 1

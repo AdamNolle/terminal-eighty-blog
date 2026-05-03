@@ -1,0 +1,24 @@
+{{ define "main" }}
+<article class="post-full">
+
+    <header class="post-card">
+        <div class="card-terminal-bar">
+            <div class="card-status-box"></div>
+            <div class="card-scanlines"></div>
+        </div>
+        <div class="post-card-content">
+            <h1 class="post-title">[CONNECT]</h1>
+        </div>
+    </header>
+
+    <section class="post-content">
+        <p>You can find me at the following locations:</p>
+
+        <ul>
+            <li><strong>RSS Feed:</strong> <a href="{{ .Site.Params.rssURL }}">Subscribe via RSS</a></li>
+            <li><strong>YouTube:</strong> <a href="{{ .Site.Params.youtubeURL }}" target="_blank" rel="noopener">Terminal Eighty</a></li>
+        </ul>
+    </section>
+
+</article>
+{{ end }}
