@@ -33,13 +33,13 @@ fi
 # 2. Restore Remark42
 if [ -f "$BACKUP_REPO_DIR/remark42_backup.db" ]; then
     echo ">> Restoring Remark42 Database..."
-    sudo cp $BACKUP_REPO_DIR/remark42_backup.db /var/lib/docker/volumes/docker_remark_data/_data/remark.db
+    sudo cp $BACKUP_REPO_DIR/remark42_backup.db /var/lib/docker/volumes/terminal-eighty_remark_data/_data/remark.db
 fi
 
 # 3. Restore CMS
 if [ -f "$BACKUP_REPO_DIR/cms_auth_backup.db" ]; then
     echo ">> Restoring CMS Auth Database..."
-    sudo cp $BACKUP_REPO_DIR/cms_auth_backup.db /var/lib/docker/volumes/docker_cms_data/_data/auth.db
+    sudo cp $BACKUP_REPO_DIR/cms_auth_backup.db /var/lib/docker/volumes/terminal-eighty_cms_data/_data/auth.db
 fi
 
 # 4. Restore Environment variables (Optional - requires private key)

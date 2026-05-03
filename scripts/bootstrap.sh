@@ -33,12 +33,49 @@ fi
 # 4. Clone repository
 APP_DIR="/opt/terminal-eighty"
 if [ ! -d "$APP_DIR" ]; then
-    echo ">> Please enter your GitHub PAT (Personal Access Token) to clone the private repo:"
+    echo ">> Please enter your GitHub Username:"
+    read -p "Username: " GITHUB_USER
+    
+    echo ">> Please enter your GitHub PAT (Personal Access Token):"
     read -p "Token: " GITHUB_TOKEN
     
     # We clone into /opt/terminal-eighty
-    sudo git clone https://${GITHUB_TOKEN}@github.com/yourusername/terminal-eighty-blog.git $APP_DIR
+    sudo git clone https://${GITHUB_TOKEN}@github.com/${GITHUB_USER}/terminal-eighty-blog.git $APP_DIR
     sudo chown -R $USER:$USER $APP_DIR
+fi
+
+# 4.5. Clone Backup Repository & Setup Encryption
+BACKUP_DIR="/opt/terminal-eighty-backups"
+if [ ! -d "$BACKUP_DIR" ]; then
+    echo ">> Cloning private backup repository..."
+    sudo git clone https://${GITHUB_TOKEN}@github.com/${GITHUB_USER}/terminal-eighty-backups.git $BACKUP_DIR
+    sudo chown -R $USER:$USER $BACKUP_DIR
+    
+    # Generate Age Keypair for backups
+    if command -v age-keygen &> /dev/null; then
+        echo ">> Generating encryption keys for backups..."
+        age-keygen -o /tmp/key.txt > /dev/null 2>&1
+        PUB_KEY=$(grep "public key" /tmp/key.txt | awk '{print $4}')
+        echo $PUB_KEY > $BACKUP_DIR/public.key
+        
+        echo -e "\n=========================================================="
+        echo "🚨 IMPORTANT: SAVE YOUR PRIVATE KEY!"
+        echo "Please copy the following private key into your password manager."
+        echo "You will need this to restore your blog from backups if the Pi dies!"
+        echo "=========================================================="
+        cat /tmp/key.txt | grep "AGE-SECRET-KEY"
+        echo -e "==========================================================\n"
+        rm /tmp/key.txt
+        
+        # We need git name/email to commit the public key if not set
+        cd $BACKUP_DIR
+        git config user.name "Terminal Eighty Pi"
+        git config user.email "pi@terminaleighty.com"
+        git add public.key
+        git commit -m "Add age public key for environment backups"
+        git push origin main
+        cd - > /dev/null
+    fi
 fi
 
 cd $APP_DIR/docker
@@ -65,11 +102,11 @@ fi
 
 # 6. Start Docker Compose
 echo ">> Starting services..."
-docker compose up -d --build
+sudo docker compose up -d --build
 
 # 7. Setup Backup Cron (Daily at 2 AM)
 echo ">> Setting up automated backups..."
-(crontab -l 2>/dev/null | grep -v "backup.sh"; echo "0 2 * * * cd $APP_DIR && ./scripts/backup.sh >> /var/log/terminal-eighty-backup.log 2>&1") | crontab -
+(crontab -l 2>/dev/null | grep -v "backup.sh"; echo "0 2 * * * cd $APP_DIR && ./scripts/backup.sh >> $APP_DIR/backup.log 2>&1") | crontab -
 
 echo -e "\n✅ BOOTSTRAP COMPLETE"
 echo "  The system is now running. Wait 1-2 minutes for containers to initialize."
