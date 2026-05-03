@@ -1,12 +1,15 @@
 import simpleGit from 'simple-git';
-import { SITE_DIR } from '../../server.js';
 import { join } from 'path';
 
-// Initialize git in the parent directory (which contains both site/ and admin/)
-const repoPath = join(SITE_DIR, '..');
-const git = simpleGit(repoPath);
+// Get repo path based on environment
+const getGitInstance = () => {
+    const siteDir = process.env.SITE_DIR || '/app/site';
+    const repoPath = join(siteDir, '..');
+    return simpleGit(repoPath);
+};
 
 export async function publishChanges() {
+    const git = getGitInstance();
     try {
         console.log('Publishing changes...');
         // Configure author if needed (optional, git might already be configured)
@@ -37,6 +40,7 @@ export async function publishChanges() {
 }
 
 export async function getGitStatus() {
+    const git = getGitInstance();
     try {
         const status = await git.status();
         const lastCommit = await git.log({ maxCount: 1 });
