@@ -1,7 +1,12 @@
 let startRegistration, startAuthentication;
-if (typeof SimpleWebAuthnBrowser !== 'undefined') {
-    startRegistration = SimpleWebAuthnBrowser.startRegistration;
-    startAuthentication = SimpleWebAuthnBrowser.startAuthentication;
+
+try {
+    if (typeof SimpleWebAuthnBrowser !== 'undefined') {
+        startRegistration = SimpleWebAuthnBrowser.startRegistration;
+        startAuthentication = SimpleWebAuthnBrowser.startAuthentication;
+    }
+} catch (e) {
+    console.warn("WebAuthn library failed to load:", e);
 }
 
 // Utility for showing errors
