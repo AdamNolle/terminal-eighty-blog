@@ -65,18 +65,71 @@
             <div class="card-scanlines"></div>
         </div>
         <div class="post-card-content">
-            <h1 class="post-title">[CONNECT]</h1>
+            <h1 class="post-title">Connect</h1>
+
+            <p class="post-meta">
+                >> 2026-01-03 23:39
+                
+                
+            </p>
         </div>
     </header>
 
     <section class="post-content">
-        <p>You can find me at the following locations:</p>
-
-        <ul>
-            <li><strong>RSS Feed:</strong> <a href="/index.xml">Subscribe via RSS</a></li>
-            <li><strong>YouTube:</strong> <a href="https://www.youtube.com/@TerminalEighty" target="_blank" rel="noopener">Terminal Eighty</a></li>
-        </ul>
+        
     </section>
+
+    
+    
+
+<div id="remark42-comments" style="margin-top: 40px;">
+    <div id="remark42"></div>
+</div>
+
+<script>
+(function() {
+    
+    var loaded = false;
+    var observer = new IntersectionObserver(function(entries) {
+        if (entries[0].isIntersecting && !loaded) {
+            loaded = true;
+            observer.disconnect();
+            loadRemark42();
+        }
+    }, { rootMargin: '200px' });
+
+    var target = document.getElementById('remark42-comments');
+    if (target) observer.observe(target);
+
+    function loadRemark42() {
+        var remark_config = {
+            host: "\"https://comments.terminaleighty.com\"",
+            site_id: "\"terminaleighty\"",
+            url: "\"http://localhost:1313/connect/\"",
+            theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light',
+            show_email_subscription: false,
+            show_rss_subscription: true,
+            simple_view: false,
+            no_footer: false
+        };
+
+        window.remark_config = remark_config;
+        window.REMARK42 = window.REMARK42 || {};
+        window.REMARK42.changeTheme = function(theme) {
+            if (window.REMARK42.changeTheme._orig) {
+                window.REMARK42.changeTheme._orig(theme);
+            }
+        };
+
+        var d = document, s = d.createElement('script');
+        s.src = remark_config.host + '/web/embed.js';
+        s.defer = true;
+        (d.head || d.body).appendChild(s);
+    }
+})();
+</script>
+
+
 
 </article>
 
@@ -90,8 +143,8 @@
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     "headline": "\"Connect\"",
-    "datePublished": "\"0001-01-01T00:00:00Z\"",
-    
+    "datePublished": "\"2026-01-03T23:39:35Z\"",
+    "dateModified": "\"2026-01-03T23:39:35Z\"",
     "author": {
         "@type": "Person",
         "name": "\"Terminal Eighty\""

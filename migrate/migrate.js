@@ -10,7 +10,8 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
-import { join, basename } from 'path';
+import { join, basename, dirname } from 'path';
+import { execSync } from 'child_process';
 import TurndownService from 'turndown';
 
 // Parse CLI args
@@ -23,9 +24,10 @@ function getArg(name) {
 const inputFile = getArg('input');
 const outputDir = getArg('output') || '../site/content';
 const imagesDir = getArg('images') || '../site/static/images';
+const downloadImages = args.includes('--download-images');
 
 if (!inputFile) {
-    console.error('Usage: node migrate.js --input ghost-export.json [--output ../site/content] [--images ../site/static/images]');
+    console.error('Usage: node migrate.js --input ghost-export.json [--output ../site/content] [--images ../site/static/images] [--download-images]');
     process.exit(1);
 }
 
@@ -200,14 +202,31 @@ console.log(`   ${imageUrls.size} unique image references found`);
 console.log('');
 
 if (imageUrls.size > 0) {
-    console.log('📸 Image download needed!');
-    console.log('   Your Ghost posts reference images that need to be downloaded.');
-    console.log('   You can download them from your Ghost admin:');
-    console.log('   Settings → Labs → Export → Download the /content/images/ folder');
-    console.log('   Then place them in: ' + imagesDir);
-    console.log('');
-    console.log('   Or download them from the live site:');
-    imageUrls.forEach(url => {
-        console.log(`   curl -o ${imagesDir}${url.replace('/images/', '/')} https://terminaleighty.com/content${url}`);
-    });
+    if (downloadImages) {
+        console.log('📸 Downloading images...');
+        imageUrls.forEach(url => {
+            const targetPath = `${imagesDir}${url.replace('/images/', '/')}`;
+            mkdirSync(dirname(targetPath), { recursive: true });
+            console.log(`   Downloading ${url}...`);
+            try {
+                execSync(`curl -s -o "${targetPath}" "https://terminaleighty.com/content${url}"`);
+            } catch (e) {
+                console.error(`   ❌ Failed to download ${url}`);
+            }
+        });
+        console.log('✅ Images downloaded successfully!');
+    } else {
+        console.log('📸 Image download needed!');
+        console.log('   Your Ghost posts reference images that need to be downloaded.');
+        console.log('   You can download them from your Ghost admin:');
+        console.log('   Settings → Labs → Export → Download the /content/images/ folder');
+        console.log('   Then place them in: ' + imagesDir);
+        console.log('');
+        console.log('   Or run migrate.js with the --download-images flag to download them automatically.');
+        console.log('');
+        console.log('   Or download them manually using these commands:');
+        imageUrls.forEach(url => {
+            console.log(`   curl --create-dirs -o ${imagesDir}${url.replace('/images/', '/')} https://terminaleighty.com/content${url}`);
+        });
+    }
 }
