@@ -5,11 +5,12 @@
 # Runs via cron to pull latest GitHub changes and restart Docker containers
 # ==============================================================================
 
-# Variables (Adjust if cloned to a different path on the Pi)
+# Variables
 REPO_DIR="/home/adam/terminal-eighty-blog"
+DOCKER_DIR="$REPO_DIR/docker"
 
 # Navigate to repo
-cd "$REPO_DIR" || { echo "Failed to find repo at $REPO_DIR"; exit 1; }
+cd "$REPO_DIR" || { echo "$(date): Failed to find repo at $REPO_DIR"; exit 1; }
 
 # Fetch latest from remote
 git fetch origin main
@@ -24,10 +25,10 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     # Pull changes
     git pull origin main
     
-    # Rebuild containers
-    echo "$(date): Restarting Docker containers..."
-    docker compose -f "$REPO_DIR/docker/docker-compose.yml" down
-    docker compose -f "$REPO_DIR/docker/docker-compose.yml" up -d --build
+    # Rebuild containers gracefully (no "down" — only recreates changed containers)
+    # This keeps cloudflared and other unchanged services running during rebuild
+    echo "$(date): Rebuilding changed containers..."
+    docker compose --project-directory "$DOCKER_DIR" up -d --build --remove-orphans
     
     echo "$(date): Update and deployment complete."
 else
