@@ -18,6 +18,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+    environment:
+      - DOMAIN_ADMIN=${DOMAIN_ADMIN}
+      - DOMAIN_COMMENTS=${DOMAIN_COMMENTS}
+      - DOMAIN_ANALYTICS=${DOMAIN_ANALYTICS}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
