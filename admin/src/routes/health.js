@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getSystemStats, getTemperature, getDiskUsage, getDockerStats, getBackupStatus } from '../utils/system.js';
 import { readdirSync } from 'fs';
 import { join } from 'path';
-import { SITE_DIR } from '../../server.js';
+const SITE_DIR = process.env.SITE_DIR || join(process.cwd(), '..', 'site');
 
 const router = Router();
 

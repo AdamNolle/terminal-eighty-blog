@@ -2,10 +2,10 @@ import { Router } from 'express';
 import multer from 'multer';
 import { extname, join } from 'path';
 import { randomBytes } from 'crypto';
-import { SITE_DIR } from '../../server.js';
 import { mkdirSync, readdirSync, statSync } from 'fs';
 
 const router = Router();
+const SITE_DIR = process.env.SITE_DIR || join(process.cwd(), '..', 'site');
 const imgDir = join(SITE_DIR, 'static', 'images');
 
 // Ensure directory exists
