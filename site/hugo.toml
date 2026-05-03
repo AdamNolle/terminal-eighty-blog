@@ -47,7 +47,7 @@ copyright = "Terminal Eighty"
   umamiSiteID = ""  # Fill after Umami setup
   # Social
   youtubeURL = "https://www.youtube.com/@TerminalEighty"
-  rssURL = "/index.xml"
+  rssURL = "index.xml"
 
 # Menu
 [[menus.main]]

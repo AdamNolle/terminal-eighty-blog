@@ -20,8 +20,8 @@
     {{ end }}
 
     {{/* Preload critical CSS */}}
-    <link rel="preload" href="/css/screen.css" as="style" />
-    <link rel="stylesheet" href="/css/screen.css" />
+    <link rel="preload" href="{{ "css/screen.css" | relURL }}" as="style" />
+    <link rel="stylesheet" href="{{ "css/screen.css" | relURL }}" />
 
     {{/* Instant dark mode (no flash) */}}
     <script>

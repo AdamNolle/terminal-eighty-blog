@@ -1,4 +1,8 @@
-const { startRegistration, startAuthentication } = SimpleWebAuthnBrowser;
+let startRegistration, startAuthentication;
+if (typeof SimpleWebAuthnBrowser !== 'undefined') {
+    startRegistration = SimpleWebAuthnBrowser.startRegistration;
+    startAuthentication = SimpleWebAuthnBrowser.startAuthentication;
+}
 
 // Utility for showing errors
 function showError(msg) {
@@ -115,6 +119,7 @@ if (btnPasskeyLogin) {
             // 2. Pass to browser authenticator
             let authResp;
             try {
+                if (!startAuthentication) throw new Error('WebAuthn library not loaded. Disable ad-blocker or check network.');
                 authResp = await startAuthentication(options);
             } catch (err) {
                 if (err.name === 'NotAllowedError') return; // User cancelled
@@ -152,6 +157,7 @@ if (btnRegisterPasskey) {
             
             let authResp;
             try {
+                if (!startRegistration) throw new Error('WebAuthn library not loaded. Disable ad-blocker or check network.');
                 authResp = await startRegistration(options);
             } catch (err) {
                 if (err.name === 'NotAllowedError') return;
