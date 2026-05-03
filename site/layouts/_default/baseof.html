@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ if .IsHome }}{{ .Site.Title }} — {{ .Site.Params.tagline }}{{ else }}{{ .Title }} — {{ .Site.Title }}{{ end }}</title>
+    <meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.tagline }}{{ end }}" />
+
+    {{/* Open Graph */}}
+    <meta property="og:title" content="{{ .Title | default .Site.Title }}" />
+    <meta property="og:description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.tagline }}{{ end }}" />
+    <meta property="og:type" content="{{ if .IsPage }}article{{ else }}website{{ end }}" />
+    <meta property="og:url" content="{{ .Permalink }}" />
+    <meta property="og:site_name" content="{{ .Site.Title }}" />
+
+    {{/* RSS */}}
+    {{ with .OutputFormats.Get "RSS" }}
+    <link rel="alternate" type="application/rss+xml" title="{{ $.Site.Title }}" href="{{ .Permalink }}" />
+    {{ end }}
+
+    {{/* Preload critical CSS */}}
+    <link rel="preload" href="/css/screen.css" as="style" />
+    <link rel="stylesheet" href="/css/screen.css" />
+
+    {{/* Instant dark mode (no flash) */}}
+    <script>
+        if (localStorage.getItem('theme') === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+        }
+    </script>
+
+    {{/* Umami Analytics */}}
+    {{ partial "analytics.html" . }}
+</head>
+
+<body class="{{ with .Section }}page-{{ . }}{{ end }}{{ if .IsHome }} home-template{{ end }}">
+
+    <div class="viewport">
+        {{ partial "header.html" . }}
+
+        <main>
+            {{ block "main" . }}{{ end }}
+        </main>
+    </div>
+
+    {{ partial "footer.html" . }}
+
+    {{/* Theme toggle script */}}
+    <script>
+        const toggleBtn = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+
+        function updateText() {
+            if (html.getAttribute('data-theme') === 'dark') {
+                toggleBtn.innerText = "[DARK]";
+            } else {
+                toggleBtn.innerText = "[LIGHT]";
+            }
+        }
+
+        // Run on load
+        updateText();
+
+        toggleBtn.addEventListener('click', () => {
+            if (html.getAttribute('data-theme') === 'dark') {
+                html.removeAttribute('data-theme');
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            updateText();
+            // Sync Remark42 theme if loaded
+            if (window.REMARK42) {
+                window.REMARK42.changeTheme(html.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+            }
+        });
+    </script>
+
+</body>
+</html>

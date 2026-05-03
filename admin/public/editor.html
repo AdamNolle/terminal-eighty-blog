@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor - Terminal Eighty CMS</title>
+    <link rel="stylesheet" href="/css/admin.css">
+    
+    <!-- Code Highlight CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    
+    <!-- ES Module Import Map for TipTap -->
+    <script type="importmap">
+        {
+            "imports": {
+                "@tiptap/core": "https://esm.sh/@tiptap/core@2.2.4",
+                "@tiptap/starter-kit": "https://esm.sh/@tiptap/starter-kit@2.2.4",
+                "@tiptap/extension-image": "https://esm.sh/@tiptap/extension-image@2.2.4",
+                "@tiptap/extension-link": "https://esm.sh/@tiptap/extension-link@2.2.4",
+                "@tiptap/extension-placeholder": "https://esm.sh/@tiptap/extension-placeholder@2.2.4",
+                "@tiptap/extension-code-block-lowlight": "https://esm.sh/@tiptap/extension-code-block-lowlight@2.2.4",
+                "lowlight": "https://esm.sh/lowlight@3.1.0",
+                "markdown-it": "https://esm.sh/markdown-it@14.0.0",
+                "turndown": "https://esm.sh/turndown@7.1.3",
+                "turndown-plugin-gfm": "https://esm.sh/turndown-plugin-gfm@1.0.2"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container" style="max-width: 1600px;">
+        <header class="admin-header">
+            <h1>
+                <a href="/" style="color: inherit; display: flex; align-items: center; gap: 15px;">
+                    <div class="header-green-box"></div>
+                    TERMINAL EIGHTY
+                </a>
+            </h1>
+            <div class="nav-links">
+                <span id="save-status" style="margin-right: 15px; opacity: 0.7; align-self: center;"></span>
+                <button id="btn-save" class="btn">[SAVE DRAFT]</button>
+                <button id="btn-publish" class="btn primary">[SAVE & PUBLISH]</button>
+            </div>
+        </header>
+
+        <div class="editor-layout">
+            
+            <!-- TipTap Editor -->
+            <div class="tiptap-container">
+                <div class="editor-toolbar" id="toolbar">
+                    <button data-cmd="bold">B</button>
+                    <button data-cmd="italic">I</button>
+                    <button data-cmd="strike">S</button>
+                    <span style="border-right: 1px solid #555; margin: 0 5px;"></span>
+                    <button data-cmd="h1">H1</button>
+                    <button data-cmd="h2">H2</button>
+                    <button data-cmd="h3">H3</button>
+                    <span style="border-right: 1px solid #555; margin: 0 5px;"></span>
+                    <button data-cmd="bulletList">• List</button>
+                    <button data-cmd="orderedList">1. List</button>
+                    <button data-cmd="blockquote">Quote</button>
+                    <button data-cmd="codeBlock">Code</button>
+                    <span style="border-right: 1px solid #555; margin: 0 5px;"></span>
+                    <button id="btn-link">Link</button>
+                    <button id="btn-image">Image</button>
+                    <span style="flex-grow: 1;"></span>
+                    <button id="btn-toggle-md">Markdown Source</button>
+                </div>
+                
+                <!-- The actual editor elements -->
+                <div id="editor-element" style="flex-grow: 1; display: flex; flex-direction: column;"></div>
+                <textarea id="markdown-source" style="display: none; flex-grow: 1; border: none; resize: none; padding: 20px; font-size: 1.1em;" autocomplete="off" spellcheck="false"></textarea>
+            </div>
+
+            <!-- Frontmatter Sidebar -->
+            <div class="sidebar">
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="post-title" placeholder="Post Title">
+                </div>
+                
+                <div class="form-group">
+                    <label>Slug (URL)</label>
+                    <input type="text" id="post-slug" placeholder="post-title">
+                </div>
+                
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="post-draft" style="width: 100%; padding: 8px; background: var(--bg-color); color: var(--ink-color); border: 2px solid var(--ink-color); font-family: var(--font-mono);">
+                        <option value="true">Draft</option>
+                        <option value="false">Published</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="datetime-local" id="post-date">
+                </div>
+
+                <div class="form-group">
+                    <label>Tags (comma separated)</label>
+                    <input type="text" id="post-tags" placeholder="tech, thoughts, code">
+                </div>
+
+                <div class="form-group" style="flex-grow: 1;">
+                    <label>Excerpt / Description</label>
+                    <textarea id="post-desc" style="height: 100%; min-height: 100px; resize: none;" placeholder="Short summary for SEO and post cards"></textarea>
+                </div>
+                
+                <div class="form-group" style="margin-top: auto; border-top: 1px solid #555; padding-top: 15px;">
+                    <button id="btn-delete" style="width: 100%; color: var(--terminal-red); border-color: var(--terminal-red); display: none;">DELETE POST</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Hidden file input for image uploads -->
+    <input type="file" id="image-upload-input" style="display: none;" accept="image/*,video/*">
+
+    <div id="toast" class="toast">Action completed.</div>
+
+    <script type="module" src="/js/editor.js"></script>
+</body>
+</html>
