@@ -26,8 +26,8 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     
     # Rebuild containers
     echo "$(date): Restarting Docker containers..."
-    docker compose down
-    docker compose up -d --build
+    docker compose -f "$REPO_DIR/docker/docker-compose.yml" down
+    docker compose -f "$REPO_DIR/docker/docker-compose.yml" up -d --build
     
     echo "$(date): Update and deployment complete."
 else
