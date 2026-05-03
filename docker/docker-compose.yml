@@ -67,6 +67,7 @@ services:
     container_name: umami
     restart: unless-stopped
     environment:
+      - DATABASE_TYPE=postgresql
       - DATABASE_URL=postgresql://umami:${UMAMI_DB_PASSWORD}@postgres:5432/umami
       - APP_SECRET=${UMAMI_SECRET}
     depends_on:
