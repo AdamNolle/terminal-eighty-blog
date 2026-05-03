@@ -321,14 +321,64 @@ function setupMarkdownToggle() {
 function setupImageUpload() {
     const btnImage = document.getElementById('btn-image');
     const fileInput = document.getElementById('image-upload-input');
+    const imageModal = document.getElementById('image-modal');
+    const btnCloseImageModal = document.getElementById('btn-close-image-modal');
+    const btnUploadNew = document.getElementById('btn-upload-new');
+    const gallery = document.getElementById('image-gallery');
 
-    btnImage.addEventListener('click', () => fileInput.click());
+    // Open Modal
+    btnImage.addEventListener('click', async () => {
+        if (isMarkdownMode) return;
+        imageModal.style.display = 'flex';
+        await loadGallery();
+    });
+
+    // Close Modal
+    btnCloseImageModal.addEventListener('click', () => {
+        imageModal.style.display = 'none';
+    });
+
+    // Upload New from Modal
+    btnUploadNew.addEventListener('click', () => fileInput.click());
 
     fileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        if (file) await uploadImage(file);
+        if (file) {
+            imageModal.style.display = 'none';
+            await uploadImage(file);
+        }
         fileInput.value = '';
     });
+
+    async function loadGallery() {
+        gallery.innerHTML = 'Loading images...';
+        try {
+            const res = await fetch('/api/media');
+            const files = await res.json();
+            gallery.innerHTML = '';
+            if (files.length === 0) {
+                gallery.innerHTML = 'No images found.';
+                return;
+            }
+            files.forEach(f => {
+                const imgWrap = document.createElement('div');
+                imgWrap.style.cursor = 'pointer';
+                imgWrap.style.border = '2px solid var(--ink-color)';
+                imgWrap.style.height = '150px';
+                imgWrap.style.background = `url(${f.url}) center/cover no-repeat var(--bg-color)`;
+                imgWrap.title = f.filename;
+                
+                imgWrap.addEventListener('click', () => {
+                    editor.chain().focus().setImage({ src: f.url }).run();
+                    imageModal.style.display = 'none';
+                });
+                
+                gallery.appendChild(imgWrap);
+            });
+        } catch (err) {
+            gallery.innerHTML = 'Failed to load images.';
+        }
+    }
 
     // Drag and Drop
     const container = document.querySelector('.tiptap-container');

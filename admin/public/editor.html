@@ -37,6 +37,7 @@
                 </a>
             </h1>
             <div class="nav-links">
+                <button id="btn-theme" class="btn" style="margin-right: 15px;">[☀️/🌙]</button>
                 <span id="save-status" style="margin-right: 15px; opacity: 0.7; align-self: center;"></span>
                 <button id="btn-save" class="btn">[SAVE DRAFT]</button>
                 <button id="btn-publish" class="btn primary">[SAVE & PUBLISH]</button>
@@ -115,11 +116,28 @@
         </div>
     </div>
 
+    <!-- Image Selector Modal -->
+    <div id="image-modal" class="modal" style="display: none;">
+        <div class="modal-content panel">
+            <div class="panel-header">
+                <span>[ SELECT IMAGE ]</span>
+                <button id="btn-close-image-modal" style="padding: 2px 5px">X</button>
+            </div>
+            <div class="panel-content">
+                <button id="btn-upload-new" class="btn primary" style="margin-bottom: 15px;">Upload New Image</button>
+                <div id="image-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; max-height: 400px; overflow-y: auto;">
+                    Loading images...
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Hidden file input for image uploads -->
     <input type="file" id="image-upload-input" style="display: none;" accept="image/*,video/*">
 
     <div id="toast" class="toast">Action completed.</div>
 
+    <script src="/js/theme.js"></script>
     <script type="module" src="/js/editor.js"></script>
 </body>
 </html>

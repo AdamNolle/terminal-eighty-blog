@@ -152,6 +152,52 @@ document.getElementById('btn-publish')?.addEventListener('click', async () => {
     }
 });
 
+// Terminal Logic
+const terminalModal = document.getElementById('terminal-modal');
+const btnTerminal = document.getElementById('btn-terminal');
+const btnCloseTerminal = document.getElementById('btn-close-terminal');
+const terminalForm = document.getElementById('terminal-form');
+const terminalInput = document.getElementById('terminal-input');
+const terminalOutput = document.getElementById('terminal-output');
+
+if (btnTerminal) {
+    btnTerminal.addEventListener('click', () => {
+        terminalModal.style.display = 'flex';
+        terminalInput.focus();
+    });
+}
+
+if (btnCloseTerminal) {
+    btnCloseTerminal.addEventListener('click', () => {
+        terminalModal.style.display = 'none';
+    });
+}
+
+if (terminalForm) {
+    terminalForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const cmd = terminalInput.value.trim();
+        if (!cmd) return;
+        
+        terminalOutput.textContent += `\n> ${cmd}\n`;
+        terminalInput.value = '';
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+        
+        try {
+            const res = await fetch('/api/health/terminal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: cmd })
+            });
+            const data = await res.json();
+            terminalOutput.textContent += (data.output || 'No output') + '\n';
+        } catch (err) {
+            terminalOutput.textContent += `\n[NETWORK ERROR]\n`;
+        }
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    });
+}
+
 // Init
 if (window.location.pathname === '/' || window.location.pathname === '/index.html') {
     loadPosts();

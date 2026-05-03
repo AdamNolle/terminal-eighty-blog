@@ -34,6 +34,9 @@ async function checkStatus() {
             // If on any other page and not authenticated, redirect to login
             if (!data.authenticated) {
                 window.location.href = '/login.html';
+            } else if (data.hasPasskey) {
+                const secPanel = document.getElementById('security-panel');
+                if (secPanel) secPanel.style.display = 'none';
             }
         }
     } catch (err) {

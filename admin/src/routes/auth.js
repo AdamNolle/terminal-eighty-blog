@@ -83,15 +83,21 @@ function createSession(res, user) {
 router.get('/status', (req, res) => {
     const session = req.signedCookies?.session;
     let authenticated = false;
+    let hasPasskey = false;
     if (session) {
         try {
             const data = JSON.parse(Buffer.from(session, 'base64').toString());
-            authenticated = data.expires > Date.now();
+            if (data.expires > Date.now()) {
+                authenticated = true;
+                const passkeysCount = db.prepare('SELECT COUNT(*) as count FROM passkeys WHERE user_id = ?').get(data.userId);
+                hasPasskey = passkeysCount && passkeysCount.count > 0;
+            }
         } catch { /* invalid session */ }
     }
     res.json({
         setupComplete: hasUsers(),
         authenticated,
+        hasPasskey
     });
 });
 

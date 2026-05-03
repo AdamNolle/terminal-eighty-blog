@@ -16,6 +16,9 @@
                 TERMINAL EIGHTY // ADMIN
             </h1>
             <div class="nav-links">
+                <button id="btn-theme" class="btn">[☀️/🌙]</button>
+                <a href="https://comments.terminaleighty.com/web/" target="_blank" class="btn">[COMMENTS]</a>
+                <button id="btn-terminal" class="btn">[TERMINAL]</button>
                 <a href="/editor.html" class="btn primary">[+ NEW POST]</a>
                 <button id="btn-publish" class="btn">[PUBLISH SITE]</button>
                 <button id="btn-logout" class="btn">[LOGOUT]</button>
@@ -90,7 +93,7 @@
                 </div>
 
                 <!-- Settings -->
-                <div class="panel">
+                <div class="panel" id="security-panel">
                     <div class="panel-header">
                         <span>[ SECURITY ]</span>
                     </div>
@@ -104,8 +107,28 @@
         </div>
     </div>
 
+    <div id="terminal-modal" class="modal" style="display: none;">
+        <div class="modal-content panel">
+            <div class="panel-header">
+                <span>[ TERMINAL SESSION ]</span>
+                <button id="btn-close-terminal" style="padding: 2px 5px">X</button>
+            </div>
+            <div class="panel-content">
+                <div class="terminal-output" id="terminal-output" style="background: #000; color: #0f0; padding: 10px; height: 300px; overflow-y: scroll; font-family: monospace; border: 2px solid var(--ink-color); margin-bottom: 10px; white-space: pre-wrap;">Welcome to Terminal Eighty Pi Shell.
+Note: Commands execute directly on the Pi host container.
+</div>
+                <form id="terminal-form" style="display: flex; gap: 10px;">
+                    <span style="align-self: center; font-weight: bold;">>&nbsp;</span>
+                    <input type="text" id="terminal-input" placeholder="Enter command (e.g. uptime)" style="flex-grow: 1; background: var(--bg-color); color: var(--ink-color);" autocomplete="off">
+                    <button type="submit" class="btn primary">Run</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="toast">Action completed.</div>
 
+    <script src="/js/theme.js"></script>
     <script src="/js/app.js"></script>
     <script src="/js/auth.js"></script>
 </body>
