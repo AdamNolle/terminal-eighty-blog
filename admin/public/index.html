@@ -31,7 +31,10 @@
             <div class="panel">
                 <div class="panel-header">
                     <span>[ POSTS ]</span>
-                    <span id="post-count">Loading...</span>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="text" id="post-search" placeholder="Search posts..." style="background: var(--bg-color); color: var(--ink-color); border: 1px solid #555; padding: 2px 5px; font-family: var(--font-mono); width: 150px;">
+                        <span id="post-count">Loading...</span>
+                    </div>
                 </div>
                 <div class="panel-content">
                     <ul class="post-list" id="post-list-el">
