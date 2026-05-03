@@ -17,7 +17,8 @@ COPY public/ ./public/
 # Git config for the CMS user
 RUN git config --global user.name "Terminal Eighty CMS" && \
     git config --global user.email "cms@terminaleighty.com" && \
-    git config --global init.defaultBranch main
+    git config --global init.defaultBranch main && \
+    git config --global --add safe.directory /app
 
 ENV PORT=3000
 ENV NODE_ENV=production

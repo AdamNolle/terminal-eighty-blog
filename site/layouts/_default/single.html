@@ -15,10 +15,8 @@
                 <span style="opacity: 0.5; margin: 0 5px;">|</span>
                 {{ range $i, $tag := . }}{{ if $i }} {{ end }}[{{ $tag | upper }}]{{ end }}
                 {{ end }}
-                {{ if .Params.readingTime }}
                 <span style="opacity: 0.5; margin: 0 5px;">|</span>
                 {{ .ReadingTime }} min read
-                {{ end }}
             </p>
         </div>
     </header>

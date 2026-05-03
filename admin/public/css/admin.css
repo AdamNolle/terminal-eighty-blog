@@ -45,11 +45,14 @@ button, .btn {
     border: 2px solid var(--ink-color);
     color: var(--ink-color);
     font-family: var(--font-mono);
-    padding: 8px 16px;
+    padding: 6px 12px;
     cursor: pointer;
     text-transform: uppercase;
     font-weight: bold;
+    font-size: 0.85em;
     transition: all 0.2s;
+    white-space: nowrap;
+    text-decoration: none;
 }
 
 button:hover, .btn:hover {
@@ -102,6 +105,8 @@ input:focus, textarea:focus {
     border-bottom: var(--border-width) solid var(--ink-color);
     padding-bottom: 20px;
     margin-bottom: 30px;
+    flex-wrap: wrap;
+    gap: 15px;
 }
 
 .admin-header h1 {
@@ -130,7 +135,9 @@ input:focus, textarea:focus {
 
 .nav-links {
     display: flex;
-    gap: 20px;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
 }
 
 /* Auth Page */

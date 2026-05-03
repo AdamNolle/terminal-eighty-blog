@@ -8,8 +8,14 @@
         <div class="post-card-content">
             <h2 class="post-title">{{ .Title }}</h2>
 
+            {{ with .Description }}
+            <p class="post-excerpt">{{ . }}</p>
+            {{ end }}
+
             <p class="post-meta">
-                >> {{ .Date.Format "2006-01-02 15:04" }}
+                >> {{ .Date.Format "2006-01-02" }}
+                <span style="opacity: 0.5; margin: 0 5px;">|</span>
+                {{ .ReadingTime }} min read
                 {{ with .Params.tags }}
                 <span style="opacity: 0.5; margin: 0 5px;">|</span>
                 {{ range $i, $tag := . }}{{ if $i }} {{ end }}[{{ $tag | upper }}]{{ end }}

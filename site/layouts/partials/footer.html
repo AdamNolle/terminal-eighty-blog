@@ -24,3 +24,11 @@
 }
 </script>
 {{ end }}
+
+<footer class="site-footer">
+    <div class="footer-inner">
+        <span>&copy; {{ now.Year }} {{ .Site.Title }}</span>
+        <span class="footer-sep">·</span>
+        <span>{{ .Site.Params.tagline }}</span>
+    </div>
+</footer>
