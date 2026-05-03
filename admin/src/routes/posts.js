@@ -59,7 +59,8 @@ router.post('/', (req, res) => {
             return res.status(400).json({ error: 'Title is required' });
         }
         
-        const slug = data.slug || data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        const rawSlug = data.slug || data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        const slug = path.basename(rawSlug);
         const filename = `${slug}.md`;
         
         // Check if exists
@@ -86,7 +87,8 @@ router.put('/:filename', (req, res) => {
     try {
         const { data, content } = req.body;
         const oldFilename = path.basename(req.params.filename);
-        const slug = data.slug || oldFilename.replace('.md', '');
+        const rawSlug = data.slug || oldFilename.replace('.md', '');
+        const slug = path.basename(rawSlug);
         const newFilename = `${slug}.md`;
         
         const fileContent = serializePost(data, content || '');
