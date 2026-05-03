@@ -306,7 +306,20 @@ function setupToolbar() {
             e.preventDefault();
             if (isMarkdownMode) return;
             const cmd = btn.dataset.cmd;
-            editor.chain().focus().toggleNode(cmd, {}).run() || editor.chain().focus().toggleMark(cmd).run();
+            
+            // Map toolbar commands to TipTap chain methods
+            switch(cmd) {
+                case 'bold': editor.chain().focus().toggleBold().run(); break;
+                case 'italic': editor.chain().focus().toggleItalic().run(); break;
+                case 'strike': editor.chain().focus().toggleStrike().run(); break;
+                case 'h1': editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
+                case 'h2': editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
+                case 'h3': editor.chain().focus().toggleHeading({ level: 3 }).run(); break;
+                case 'bulletList': editor.chain().focus().toggleBulletList().run(); break;
+                case 'orderedList': editor.chain().focus().toggleOrderedList().run(); break;
+                case 'blockquote': editor.chain().focus().toggleBlockquote().run(); break;
+                case 'codeBlock': editor.chain().focus().toggleCodeBlock().run(); break;
+            }
         });
     });
 
@@ -322,7 +335,14 @@ function updateToolbar() {
     if (isMarkdownMode) return;
     document.querySelectorAll('#toolbar button[data-cmd]').forEach(btn => {
         const cmd = btn.dataset.cmd;
-        if (editor.isActive(cmd)) btn.classList.add('is-active');
+        let active = false;
+        switch(cmd) {
+            case 'h1': active = editor.isActive('heading', { level: 1 }); break;
+            case 'h2': active = editor.isActive('heading', { level: 2 }); break;
+            case 'h3': active = editor.isActive('heading', { level: 3 }); break;
+            default: active = editor.isActive(cmd); break;
+        }
+        if (active) btn.classList.add('is-active');
         else btn.classList.remove('is-active');
     });
 }

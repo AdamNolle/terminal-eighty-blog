@@ -21,7 +21,7 @@ copyright = "Terminal Eighty"
   baseName = "index"
 
 [outputs]
-  home = ["HTML", "RSS"]
+  home = ["HTML", "RSS", "JSON"]
 
 # Permalinks
 [permalinks]
@@ -49,8 +49,3 @@ copyright = "Terminal Eighty"
   youtubeURL = "https://www.youtube.com/@TerminalEighty"
   rssURL = "index.xml"
 
-# Menu
-[[menus.main]]
-  name = "[CONNECT]"
-  url = "/connect/"
-  weight = 1

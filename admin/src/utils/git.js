@@ -3,9 +3,10 @@ import { join } from 'path';
 
 // Get repo path based on environment
 const getGitInstance = () => {
-    const siteDir = process.env.SITE_DIR || '/app/site';
+    const siteDir = process.env.SITE_DIR || join(process.cwd(), '..', 'site');
     const repoPath = join(siteDir, '..');
-    return simpleGit(repoPath);
+    const git = simpleGit(repoPath);
+    return git;
 };
 
 export async function publishChanges() {

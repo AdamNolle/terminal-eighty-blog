@@ -44,6 +44,17 @@
         </main>
     </div>
 
+    {{/* Search Modal */}}
+    <div id="search-overlay" class="search-overlay" style="display: none;">
+        <div class="search-modal">
+            <div class="search-header">
+                <input type="text" id="search-input" placeholder="Search posts..." autocomplete="off" autofocus />
+                <button id="search-close" class="header-btn">[X]</button>
+            </div>
+            <div id="search-results" class="search-results"></div>
+        </div>
+    </div>
+
     {{ partial "footer.html" . }}
 
     {{/* Theme toggle script */}}
@@ -76,6 +87,85 @@
                 window.REMARK42.changeTheme(html.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
             }
         });
+    </script>
+
+    {{/* Search Script — Fuse.js from CDN */}}
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+    <script>
+    (function() {
+        const overlay = document.getElementById('search-overlay');
+        const input = document.getElementById('search-input');
+        const results = document.getElementById('search-results');
+        const btnOpen = document.getElementById('search-toggle');
+        const btnClose = document.getElementById('search-close');
+        let fuse = null;
+
+        // Load search index
+        async function loadIndex() {
+            if (fuse) return;
+            try {
+                const res = await fetch('{{ "index.json" | relURL }}');
+                const data = await res.json();
+                fuse = new Fuse(data, {
+                    keys: [
+                        { name: 'title', weight: 0.4 },
+                        { name: 'content', weight: 0.3 },
+                        { name: 'tags', weight: 0.2 },
+                        { name: 'description', weight: 0.1 }
+                    ],
+                    threshold: 0.3,
+                    includeMatches: true
+                });
+            } catch(e) { console.error('Search index load failed', e); }
+        }
+
+        function openSearch() {
+            overlay.style.display = 'flex';
+            input.value = '';
+            results.innerHTML = '<p style="opacity:0.6;">Start typing to search...</p>';
+            input.focus();
+            loadIndex();
+        }
+
+        function closeSearch() {
+            overlay.style.display = 'none';
+        }
+
+        btnOpen.addEventListener('click', openSearch);
+        btnClose.addEventListener('click', closeSearch);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSearch(); });
+
+        // Keyboard shortcut: / to open, Escape to close
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
+                e.preventDefault();
+                openSearch();
+            }
+            if (e.key === 'Escape') closeSearch();
+        });
+
+        input.addEventListener('input', () => {
+            const query = input.value.trim();
+            if (!query || !fuse) {
+                results.innerHTML = '<p style="opacity:0.6;">Start typing to search...</p>';
+                return;
+            }
+            const hits = fuse.search(query, { limit: 10 });
+            if (hits.length === 0) {
+                results.innerHTML = '<p style="opacity:0.6;">No results found.</p>';
+                return;
+            }
+            results.innerHTML = hits.map(h => {
+                const item = h.item;
+                const tagStr = item.tags ? item.tags.map(t => `[${t.toUpperCase()}]`).join(' ') : '';
+                return `<a href="${item.url}" class="search-result-item">
+                    <strong>${item.title}</strong>
+                    <span class="search-result-meta">${item.date} ${tagStr}</span>
+                    <span class="search-result-excerpt">${item.description || item.content.substring(0, 120) + '...'}</span>
+                </a>`;
+            }).join('');
+        });
+    })();
     </script>
 
 </body>

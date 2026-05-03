@@ -10,21 +10,40 @@ const SITE_DIR = process.env.SITE_DIR || join(process.cwd(), '..', 'site');
 
 const router = Router();
 
+// Allowed commands for the secure terminal (diagnostics only)
+const ALLOWED_COMMANDS = [
+    'uptime', 'df', 'free', 'top', 'htop', 'ps', 'whoami', 'hostname',
+    'date', 'uname', 'cat', 'ls', 'pwd', 'echo', 'docker', 'systemctl',
+    'journalctl', 'vcgencmd', 'ip', 'ping', 'dig', 'curl', 'git',
+    'npm', 'node'
+];
+
 // Secure Terminal Endpoint
 router.post('/terminal', async (req, res) => {
     try {
         const { command } = req.body;
         if (!command) return res.status(400).json({ error: 'Command required' });
         
-        // Timeout to prevent hanging commands
-        const { stdout, stderr } = await execAsync(command, { timeout: 5000 });
+        // Extract the base command (first word)
+        const baseCmd = command.trim().split(/\s+/)[0];
+        
+        // Block dangerous operators
+        if (/[;&|`$(){}]/.test(command)) {
+            return res.json({ output: '[BLOCKED] Shell operators (;, &, |, `, $) are not allowed for security.' });
+        }
+        
+        if (!ALLOWED_COMMANDS.includes(baseCmd)) {
+            return res.json({ output: `[BLOCKED] Command "${baseCmd}" is not in the allowlist.\nAllowed: ${ALLOWED_COMMANDS.join(', ')}` });
+        }
+        
+        const { stdout, stderr } = await execAsync(command, { timeout: 15000 });
         
         res.json({
             output: stdout + (stderr ? '\n[STDERR]:\n' + stderr : '')
         });
     } catch (err) {
         res.json({
-            output: err.stdout + '\n[ERROR]:\n' + err.stderr + '\n' + err.message
+            output: (err.stdout || '') + '\n[ERROR]:\n' + (err.stderr || err.message)
         });
     }
 });
