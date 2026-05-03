@@ -27,34 +27,53 @@ function formatUptime(seconds) {
 }
 
 // Load Posts
+let allPosts = [];
+
 async function loadPosts() {
     try {
         const res = await fetch('/api/posts');
-        const posts = await res.json();
-        
-        document.getElementById('post-count').textContent = `Total: ${posts.length}`;
-        
-        const list = document.getElementById('post-list-el');
-        list.innerHTML = '';
-        
-        posts.forEach(post => {
-            const li = document.createElement('li');
-            li.className = 'post-item';
-            
-            const date = new Date(post.date).toISOString().split('T')[0];
-            
-            li.innerHTML = `
-                <div>
-                    <a href="/editor.html?file=${post.filename}" class="post-item-title">${post.title}</a>
-                    ${post.draft ? '<span class="tag-draft">DRAFT</span>' : ''}
-                </div>
-                <div class="post-item-meta">${date}</div>
-            `;
-            list.appendChild(li);
-        });
+        allPosts = await res.json();
+        renderPosts(allPosts);
     } catch (err) {
         console.error('Failed to load posts', err);
     }
+}
+
+function renderPosts(posts) {
+    document.getElementById('post-count').textContent = `Total: ${posts.length}`;
+    
+    const list = document.getElementById('post-list-el');
+    list.innerHTML = '';
+    
+    posts.forEach(post => {
+        const li = document.createElement('li');
+        li.className = 'post-item';
+        
+        const date = new Date(post.date).toISOString().split('T')[0];
+        
+        li.innerHTML = `
+            <div>
+                <a href="/editor.html?file=${post.filename}" class="post-item-title">${post.title}</a>
+                ${post.draft ? '<span class="tag-draft">DRAFT</span>' : ''}
+            </div>
+            <div class="post-item-meta">${date}</div>
+        `;
+        list.appendChild(li);
+    });
+}
+
+// Search Logic
+const searchInput = document.getElementById('post-search');
+if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = allPosts.filter(p => 
+            p.title.toLowerCase().includes(term) || 
+            p.slug.toLowerCase().includes(term) ||
+            (p.tags && p.tags.some(t => t.toLowerCase().includes(term)))
+        );
+        renderPosts(filtered);
+    });
 }
 
 // Load Health Stats

@@ -72,4 +72,18 @@ router.get('/', (req, res) => {
     }
 });
 
+// Delete media
+router.delete('/:filename', (req, res) => {
+    try {
+        const { basename } = require('path');
+        const { unlinkSync } = require('fs');
+        const safeFilename = basename(req.params.filename);
+        unlinkSync(join(imgDir, safeFilename));
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to delete file' });
+    }
+});
+
 export default router;

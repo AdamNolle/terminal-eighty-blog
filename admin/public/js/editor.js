@@ -36,6 +36,11 @@ const btnPublish = document.getElementById('btn-publish');
 const btnDelete = document.getElementById('btn-delete');
 const saveStatus = document.getElementById('save-status');
 
+const editorMetrics = document.getElementById('editor-metrics');
+const spTitle = document.getElementById('sp-title');
+const spDesc = document.getElementById('sp-desc');
+const tagSuggestions = document.getElementById('tag-suggestions');
+
 // ── Toast Utility ──
 function showToast(msg) {
     const toast = document.getElementById('toast');
@@ -46,6 +51,42 @@ function showToast(msg) {
 
 function updateStatus(msg) {
     saveStatus.textContent = msg;
+}
+
+function updateMetrics() {
+    let text = '';
+    if (isMarkdownMode) {
+        text = document.getElementById('markdown-source').value;
+    } else if (editor) {
+        text = editor.getText();
+    }
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const mins = Math.ceil(words / 200);
+    if (editorMetrics) editorMetrics.textContent = `${words} words | ${mins} min`;
+}
+
+function updateSocialPreview() {
+    if (spTitle) spTitle.textContent = titleInput.value || 'Post Title';
+    if (spDesc) spDesc.textContent = descInput.value || 'Description will appear here...';
+}
+
+async function loadTags() {
+    try {
+        const res = await fetch('/api/posts');
+        const posts = await res.json();
+        const allTags = new Set();
+        posts.forEach(p => {
+            if (p.tags) p.tags.forEach(t => allTags.add(t));
+        });
+        if (tagSuggestions) {
+            tagSuggestions.innerHTML = '';
+            allTags.forEach(tag => {
+                const opt = document.createElement('option');
+                opt.value = tag;
+                tagSuggestions.appendChild(opt);
+            });
+        }
+    } catch(err) { console.error('Failed to load tags'); }
 }
 
 // ── Harper WASM Integration (Grammar Checker) ──
@@ -142,6 +183,7 @@ async function initEditor() {
             isDirty = true;
             updateStatus('Unsaved changes');
             scheduleAutosave();
+            updateMetrics();
         },
         onSelectionUpdate: updateToolbar
     });
@@ -159,7 +201,11 @@ async function initEditor() {
         const now = new Date();
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
         dateInput.value = now.toISOString().slice(0, 16);
+        updateMetrics();
+        updateSocialPreview();
     }
+    
+    loadTags();
 }
 
 // ── Load / Save Logic ──
@@ -189,6 +235,8 @@ async function loadPost(filename) {
         
         isDirty = false;
         updateStatus('');
+        updateMetrics();
+        updateSocialPreview();
     } catch (err) {
         showToast('Error loading post');
     }
@@ -314,6 +362,7 @@ function setupMarkdownToggle() {
         isDirty = true;
         updateStatus('Unsaved changes');
         scheduleAutosave();
+        updateMetrics();
     });
 }
 
@@ -362,17 +411,46 @@ function setupImageUpload() {
             }
             files.forEach(f => {
                 const imgWrap = document.createElement('div');
-                imgWrap.style.cursor = 'pointer';
-                imgWrap.style.border = '2px solid var(--ink-color)';
+                imgWrap.style.position = 'relative';
                 imgWrap.style.height = '150px';
-                imgWrap.style.background = `url(${f.url}) center/cover no-repeat var(--bg-color)`;
-                imgWrap.title = f.filename;
+
+                const imgInner = document.createElement('div');
+                imgInner.style.cursor = 'pointer';
+                imgInner.style.border = '2px solid var(--ink-color)';
+                imgInner.style.height = '100%';
+                imgInner.style.background = `url(${f.url}) center/cover no-repeat var(--bg-color)`;
+                imgInner.title = f.filename;
                 
-                imgWrap.addEventListener('click', () => {
+                imgInner.addEventListener('click', () => {
                     editor.chain().focus().setImage({ src: f.url }).run();
                     imageModal.style.display = 'none';
                 });
+
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'X';
+                delBtn.style.position = 'absolute';
+                delBtn.style.top = '5px';
+                delBtn.style.right = '5px';
+                delBtn.style.background = 'var(--terminal-red, #ff4444)';
+                delBtn.style.color = '#fff';
+                delBtn.style.border = 'none';
+                delBtn.style.cursor = 'pointer';
+                delBtn.style.padding = '2px 6px';
+                delBtn.style.fontWeight = 'bold';
+                delBtn.style.borderRadius = '3px';
                 
+                delBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (!confirm('Delete this image permanently?')) return;
+                    try {
+                        const r = await fetch(`/api/media/${f.filename}`, { method: 'DELETE' });
+                        if (r.ok) loadGallery();
+                        else alert('Failed to delete image');
+                    } catch (err) { alert('Error deleting image'); }
+                });
+                
+                imgWrap.appendChild(imgInner);
+                imgWrap.appendChild(delBtn);
                 gallery.appendChild(imgWrap);
             });
         } catch (err) {
@@ -438,10 +516,11 @@ function scheduleAutosave() {
 
 // ── Form Change Listeners ──
 [titleInput, slugInput, draftSelect, dateInput, tagsInput, descInput].forEach(el => {
-    el.addEventListener('change', () => {
+    el.addEventListener('input', () => {
         isDirty = true;
         updateStatus('Unsaved changes');
         scheduleAutosave();
+        if (el === titleInput || el === descInput) updateSocialPreview();
     });
 });
 
