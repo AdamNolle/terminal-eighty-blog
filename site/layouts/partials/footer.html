@@ -7,7 +7,14 @@
     <nav class="footer-nav" aria-label="Footer">
       <a href="{{ "/" | relURL }}">Writing</a>
       <a href="{{ "/about/" | relURL }}">About</a>
-      {{ with site.Params.rssURL }}<a href="{{ . | relURL }}">RSS</a>{{ else }}<a href="{{ "index.xml" | relURL }}">RSS</a>{{ end }}
+      {{ with site.Params.rssURL }}<a href="{{ . | relURL }}">RSS</a>{{ else }}<a href="{{ "/index.xml" | relURL }}">RSS</a>{{ end }}
+    </nav>
+    <nav class="footer-social" aria-label="Social links">
+      {{ with site.Params.youtubeURL }}<a href="{{ . }}" rel="me noopener" aria-label="YouTube">[YT]</a>{{ end }}
+      {{ with site.Params.blueskyURL }}<a href="{{ . }}" rel="me noopener" aria-label="Bluesky">[BSKY]</a>{{ end }}
+      {{ with site.Params.mastodonURL }}<a href="{{ . }}" rel="me noopener" aria-label="Mastodon">[MA]</a>{{ end }}
+      {{ with site.Params.githubURL }}<a href="{{ . }}" rel="me noopener" aria-label="GitHub">[GH]</a>{{ end }}
+      {{ with site.Params.emailURL }}<a href="{{ . }}" aria-label="Email">[@]</a>{{ end }}
     </nav>
     <div class="footer-spacer"></div>
     <div class="footer-r"><span class="pip" aria-hidden="true"></span> {{ site.Params.locationTag | default "NORTHWEST PACIFIC · HOSTED ON A PI" }}</div>

@@ -1,0 +1,10 @@
+# Hugo build output (rebuilt by CI)
+site/public/
+site/resources/_gen/
+
+# macOS noise
+.DS_Store
+
+# Editor scratch
+.vscode/
+.idea/

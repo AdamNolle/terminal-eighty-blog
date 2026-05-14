@@ -1,6 +1,6 @@
 {{- /* Terminal-row post card. Expects a page context.
        Params:
-         - .scratch.idx (int) — row number (1-based). If absent, no number is rendered.
+         - .Scratch.Get "rowIndex" (int) — row number (1-based). If absent, no number is rendered.
 */ -}}
 {{- $idx := 0 -}}
 {{- if .Scratch -}}{{- $idx = .Scratch.Get "rowIndex" | default 0 -}}{{- end -}}
@@ -10,13 +10,13 @@
   {{- else }}
   <span class="row-num" aria-hidden="true">--</span>
   {{- end }}
-  <div style="min-width:0">
+  <div class="row-body">
     <div class="row-title p-name">{{ .Title }}</div>
     {{- with .Description }}
     <div class="row-excerpt p-summary">{{ . }}</div>
     {{- else }}
       {{- with .Summary }}
-    <div class="row-excerpt p-summary">{{ . | plainify | truncate 160 }}</div>
+    <div class="row-excerpt p-summary">{{ . | plainify | htmlUnescape | truncate 160 }}</div>
       {{- end }}
     {{- end }}
     {{- with .Params.tags }}
