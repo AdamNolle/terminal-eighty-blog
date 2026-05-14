@@ -251,7 +251,7 @@
       document.body.style.overflow = "hidden";
       input.value = "";
       loadIndex().then(render);
-      requestAnimationFrame(() => input.focus());
+      input.focus({ preventScroll: true });
     }
 
     function close() {
@@ -288,6 +288,25 @@
         e.preventDefault();
         const rows = $$(".cmdk-row", list);
         activate(rows[activeIndex]);
+        return;
+      }
+      if (e.key === "Tab") {
+        const focusables = overlay.querySelectorAll(
+          'input, button, [tabindex]:not([tabindex="-1"])'
+        );
+        const visible = Array.from(focusables).filter(
+          (el) => !el.disabled && el.offsetParent !== null
+        );
+        if (visible.length === 0) { e.preventDefault(); return; }
+        const first = visible[0];
+        const last = visible[visible.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     }
 

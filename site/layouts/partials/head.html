@@ -4,17 +4,12 @@
 <meta name="theme-color" content="#07090A" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)" />
 
-{{- $title := "" -}}
-{{- if .IsHome -}}
-  {{- $title = printf "%s — %s" site.Title (site.Params.tagline | default "") | strings.TrimRight " —" -}}
-{{- else -}}
-  {{- $title = printf "%s — %s" .Title site.Title -}}
-{{- end -}}
-<title>{{ $title }}</title>
+{{- $pageTitle := cond .IsHome site.Title (printf "%s — %s" .Title site.Title) -}}
+<title>{{ $pageTitle }}</title>
 
 {{- $desc := "" -}}
 {{- with .Description -}}{{- $desc = . -}}{{- else -}}
-  {{- with .Summary -}}{{- $desc = . | plainify | truncate 200 -}}{{- else -}}
+  {{- with .Summary -}}{{- $desc = . | plainify | htmlUnescape | truncate 200 -}}{{- else -}}
     {{- $desc = site.Params.tagline | default "" -}}
   {{- end -}}
 {{- end -}}
@@ -22,16 +17,26 @@
 <link rel="canonical" href="{{ .Permalink }}" />
 
 {{/* Open Graph */}}
-<meta property="og:title" content="{{ .Title | default site.Title }}" />
+<meta property="og:title" content="{{ $pageTitle }}" />
 <meta property="og:description" content="{{ $desc }}" />
 <meta property="og:type" content="{{ if and .IsPage (eq .Section "posts") }}article{{ else }}website{{ end }}" />
 <meta property="og:url" content="{{ .Permalink }}" />
 <meta property="og:site_name" content="{{ site.Title }}" />
 <meta property="og:locale" content="{{ site.Language.Lang | default "en" | replaceRE "-" "_" }}" />
 
-{{/* Twitter card */}}
+{{/* Social card image: prefer page-level cover, then site default. Fall back to summary card when no image. */}}
+{{- $img := "" -}}
+{{- if .Params.cover -}}{{- $img = .Params.cover | absURL -}}
+{{- else if site.Params.defaultImage -}}{{- $img = site.Params.defaultImage | absURL -}}
+{{- end -}}
+{{ with $img }}
+<meta property="og:image" content="{{ . }}" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="{{ .Title | default site.Title }}" />
+<meta name="twitter:image" content="{{ . }}" />
+{{ else }}
+<meta name="twitter:card" content="summary" />
+{{ end }}
+<meta name="twitter:title" content="{{ $pageTitle }}" />
 <meta name="twitter:description" content="{{ $desc }}" />
 
 {{/* RSS / sitemap */}}
@@ -41,7 +46,7 @@
   {{- end -}}
 {{- end }}
 <link rel="alternate" type="application/rss+xml" title="{{ site.Title }} — All posts" href="{{ "/index.xml" | relURL }}" />
-<link rel="sitemap" type="application/xml" href="{{ "sitemap.xml" | relURL }}" />
+<link rel="sitemap" type="application/xml" href="{{ "/sitemap.xml" | relURL }}" />
 
 {{/* Favicon */}}
 <link rel="icon" type="image/png" href="{{ "images/logo.png" | relURL }}" />

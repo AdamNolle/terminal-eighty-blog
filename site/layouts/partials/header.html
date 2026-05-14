@@ -15,7 +15,7 @@
       <a href="{{ "/" | relURL }}"{{ if .IsHome }} class="is-active" aria-current="page"{{ end }}>Writing</a>
       <a href="{{ "/about/" | relURL }}"{{ if eq .RelPermalink "/about/" }} class="is-active" aria-current="page"{{ end }}>About</a>
     </nav>
-    <span id="site-clock" class="clock" aria-live="off" aria-hidden="true">--:--:--</span>
+    <span id="site-clock" class="clock" aria-hidden="true">--:--:--</span>
     <button id="theme-toggle" class="theme-btn" type="button" aria-pressed="false">[DARK]</button>
   </div>
 </header>

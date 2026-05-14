@@ -44,7 +44,8 @@
   --line-strong: #2E363A;
   --fg: #EFF1ED;
   --fg-dim: #9CA29F;
-  --fg-mute: #5C6562;
+  /* WCAG AA: 6.39:1 on --bg (#07090A) */
+  --fg-mute: #8A9491;
   --accent: #3DFF7F;
   --accent-soft: rgba(61,255,127,0.08);
   --accent-glow: rgba(61,255,127,0.22);
@@ -67,12 +68,14 @@
   --line-strong: #B5BAB1;
   --fg: #0A0C09;
   --fg-dim: #3F423D;
-  --fg-mute: #7A7E75;
-  --accent: #06A445;
-  --accent-soft: rgba(6,164,69,0.10);
-  --accent-glow: rgba(6,164,69,0.28);
+  /* WCAG AA: 5.57:1 on --bg (#F3F4F1) */
+  --fg-mute: #5F6359;
+  /* WCAG AA: 4.59:1 on --bg (#F3F4F1) — passes body-text 4.5:1 */
+  --accent: #048037;
+  --accent-soft: rgba(4,128,55,0.10);
+  --accent-glow: rgba(4,128,55,0.28);
   --accent-on: #FFFFFF;
-  --selection: rgba(6,164,69,0.20);
+  --selection: rgba(4,128,55,0.20);
 
   --glass-tint: rgba(255,255,255,0.55);
   --glass-border: rgba(15,18,12,0.08);
@@ -140,7 +143,7 @@ button { font: inherit; color: inherit; }
    ============================================================ */
 .app { position: relative; min-height: 100%; isolation: isolate; }
 main { display: block; }
-main:focus { outline: none; }
+main:focus:not(:focus-visible) { outline: none; }
 
 
 /* ============================================================
@@ -746,6 +749,7 @@ main:focus { outline: none; }
   transition: 200ms;
   text-align: right;
 }
+.row-body { min-width: 0; }
 
 
 /* ============================================================
@@ -1234,6 +1238,19 @@ main:focus { outline: none; }
   border-bottom: 1px dotted transparent;
 }
 .footer-nav a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.footer-social {
+  display: flex; gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.footer-social a {
+  color: var(--fg-dim);
+  text-decoration: none;
+  cursor: pointer;
+  border-bottom: 1px dotted transparent;
+}
+.footer-social a:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .footer-spacer { flex: 1; min-width: 16px; }
 .footer-r {
   font-family: var(--mono);
