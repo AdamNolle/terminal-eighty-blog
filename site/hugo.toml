@@ -23,6 +23,15 @@ copyright = "Terminal Eighty"
 [outputs]
   home = ["HTML", "RSS", "JSON"]
 
+# Minify HTML/CSS/JS output for production builds
+[minify]
+  minifyOutput = true
+
+# Image processing defaults (used by .Resize/.Fill/.Fit in future phases)
+[imaging]
+  quality = 82
+  resampleFilter = "lanczos"
+
 # Permalinks
 [permalinks]
   posts = "/:slug/"
