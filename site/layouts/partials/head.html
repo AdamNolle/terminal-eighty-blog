@@ -1,0 +1,94 @@
+{{- /* Meta + OG + Twitter + JSON-LD + preloads. Called from baseof.html. */ -}}
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#07090A" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)" />
+
+{{- $title := "" -}}
+{{- if .IsHome -}}
+  {{- $title = printf "%s — %s" site.Title (site.Params.tagline | default "") | strings.TrimRight " —" -}}
+{{- else -}}
+  {{- $title = printf "%s — %s" .Title site.Title -}}
+{{- end -}}
+<title>{{ $title }}</title>
+
+{{- $desc := "" -}}
+{{- with .Description -}}{{- $desc = . -}}{{- else -}}
+  {{- with .Summary -}}{{- $desc = . | plainify | truncate 200 -}}{{- else -}}
+    {{- $desc = site.Params.tagline | default "" -}}
+  {{- end -}}
+{{- end -}}
+<meta name="description" content="{{ $desc }}" />
+<link rel="canonical" href="{{ .Permalink }}" />
+
+{{/* Open Graph */}}
+<meta property="og:title" content="{{ .Title | default site.Title }}" />
+<meta property="og:description" content="{{ $desc }}" />
+<meta property="og:type" content="{{ if and .IsPage (eq .Section "posts") }}article{{ else }}website{{ end }}" />
+<meta property="og:url" content="{{ .Permalink }}" />
+<meta property="og:site_name" content="{{ site.Title }}" />
+<meta property="og:locale" content="{{ site.Language.Lang | default "en" | replaceRE "-" "_" }}" />
+
+{{/* Twitter card */}}
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="{{ .Title | default site.Title }}" />
+<meta name="twitter:description" content="{{ $desc }}" />
+
+{{/* RSS / sitemap */}}
+{{- range .AlternativeOutputFormats -}}
+  {{- if eq .Name "RSS" }}
+<link rel="alternate" type="{{ .MediaType.Type }}" title="{{ site.Title }}" href="{{ .Permalink }}" />
+  {{- end -}}
+{{- end }}
+<link rel="alternate" type="application/rss+xml" title="{{ site.Title }} — All posts" href="{{ "/index.xml" | relURL }}" />
+<link rel="sitemap" type="application/xml" href="{{ "sitemap.xml" | relURL }}" />
+
+{{/* Favicon */}}
+<link rel="icon" type="image/png" href="{{ "images/logo.png" | relURL }}" />
+
+{{/* Self-hosted JetBrains Mono + critical CSS — fingerprinted via Hugo's assets pipeline when available, else static path */}}
+{{- $fontsCSS := resources.Get "css/fonts.css" -}}
+{{- $screenCSS := resources.Get "css/screen.css" -}}
+{{- if $screenCSS -}}
+  {{- $screenCSS = $screenCSS | resources.Fingerprint -}}
+  {{- if $fontsCSS -}}
+    {{- $fontsCSS = $fontsCSS | resources.Fingerprint -}}
+  {{- end -}}
+  <link rel="preload" as="font" type="font/woff2" href="{{ "fonts/JetBrainsMono-Variable-Latin.woff2" | relURL }}" crossorigin />
+  {{- if $fontsCSS }}
+  <link rel="stylesheet" href="{{ $fontsCSS.RelPermalink }}" integrity="{{ $fontsCSS.Data.Integrity }}" />
+  {{- end }}
+  <link rel="preload" as="style" href="{{ $screenCSS.RelPermalink }}" />
+  <link rel="stylesheet" href="{{ $screenCSS.RelPermalink }}" integrity="{{ $screenCSS.Data.Integrity }}" />
+{{- else -}}
+  {{/* Fallback: serve from /static directly (no fingerprint) */}}
+  <link rel="preload" as="font" type="font/woff2" href="{{ "fonts/JetBrainsMono-Variable-Latin.woff2" | relURL }}" crossorigin />
+  <link rel="stylesheet" href="{{ "css/fonts.css" | relURL }}" />
+  <link rel="preload" as="style" href="{{ "css/screen.css" | relURL }}" />
+  <link rel="stylesheet" href="{{ "css/screen.css" | relURL }}" />
+{{- end -}}
+
+{{/* JSON-LD: BlogPosting only for individual posts in the "posts" section.
+     Build the dict server-side and jsonify the whole thing so Hugo's HTML
+     minifier doesn't mangle inline JSON-as-text. */}}
+{{ if and .IsPage (eq .Section "posts") }}
+{{- $author := site.Params.author | default site.Title -}}
+{{- $ld := dict
+  "@context" "https://schema.org"
+  "@type" "BlogPosting"
+  "headline" .Title
+  "datePublished" (.Date.Format "2006-01-02T15:04:05Z07:00")
+  "author" (dict "@type" "Person" "name" $author)
+  "publisher" (dict "@type" "Organization" "name" site.Title)
+  "description" $desc
+  "url" .Permalink
+  "mainEntityOfPage" (dict "@type" "WebPage" "@id" .Permalink)
+-}}
+{{- with .Lastmod -}}
+  {{- $ld = merge $ld (dict "dateModified" (.Format "2006-01-02T15:04:05Z07:00")) -}}
+{{- end -}}
+{{- with .Params.tags -}}
+  {{- $ld = merge $ld (dict "keywords" (delimit . ", ")) -}}
+{{- end -}}
+<script type="application/ld+json">{{ $ld | jsonify (dict "indent" "") | safeJS }}</script>
+{{ end }}

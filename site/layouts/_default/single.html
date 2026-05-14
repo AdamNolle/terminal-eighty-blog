@@ -1,32 +1,59 @@
 {{ define "main" }}
-<article class="post-full">
+<div id="reading-progress" class="progress" aria-hidden="true">
+  <span class="progress-label">READING</span>
+  <span class="progress-cells"></span>
+  <span class="progress-pct">0%</span>
+</div>
 
-    <header class="post-card">
-        <div class="card-terminal-bar">
-            <div class="card-status-box"></div>
-            <div class="card-scanlines"></div>
-        </div>
-        <div class="post-card-content">
-            <h1 class="post-title">{{ .Title }}</h1>
+<article class="post h-entry">
+  <a class="back" href="{{ "/" | relURL }}" aria-label="Back to writing"><span aria-hidden="true">&lt;&lt;</span> /writing</a>
 
-            <p class="post-meta">
-                >> {{ .Date.Format "2006-01-02 15:04" }}
-                {{ with .Params.tags }}
-                <span style="opacity: 0.5; margin: 0 5px;">|</span>
-                {{ range $i, $tag := . }}{{ if $i }} {{ end }}[{{ $tag | upper }}]{{ end }}
-                {{ end }}
-                <span style="opacity: 0.5; margin: 0 5px;">|</span>
-                {{ .ReadingTime }} min read
-            </p>
-        </div>
-    </header>
+  <div class="post-eyebrow">
+    <span class="post-pip" aria-hidden="true"></span>
+    {{- with .Params.tags }}
+    <span class="num">[{{ index . 0 | upper }}]</span>
+    <span class="post-sep">::</span>
+    {{- end }}
+    FROM THE TERMINAL
+  </div>
 
-    <section class="post-content">
-        {{ .Content }}
-    </section>
+  <h1 class="post-title p-name">{{ .Title }}</h1>
 
-    {{/* Comments */}}
-    {{ partial "comments.html" . }}
+  {{- with .Description }}
+  <p class="post-dek p-summary">{{ . }}</p>
+  {{- end }}
 
+  <div class="post-meta">
+    <span><b>Published</b> <time class="dt-published" datetime="{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}">{{ .Date.Format "Jan 02, 2006" }}</time></span>
+    <span class="sep">·</span>
+    <span><b>{{ .ReadingTime }}</b> min read</span>
+    <span class="sep">·</span>
+    <span>{{ .WordCount }} words</span>
+    {{- with .Params.tags }}
+    <span class="sep">·</span>
+    <span>
+      {{- range $i, $tag := . }}{{ if $i }} {{ end }}<a href="{{ printf "/tags/%s/" ($tag | urlize) | relURL }}" class="p-category">#{{ $tag }}</a>{{ end -}}
+    </span>
+    {{- end }}
+  </div>
+
+  <a class="u-url" href="{{ .Permalink }}" hidden></a>
+  <span class="p-author h-card" hidden>{{ site.Params.author | default site.Title }}</span>
+
+  <div class="prose e-content">
+    {{ .Content }}
+  </div>
+
+  <div class="end-banner" aria-hidden="true">
+    <span class="rule"></span>
+    <span class="text"><span class="pip"></span> END OF TRANSMISSION</span>
+    <span class="rule"></span>
+  </div>
+
+  {{- /* Phase 8/9 slots — stubs, render nothing yet */ -}}
+  {{ partial "webmentions.html" . }}
+  {{ partial "bluesky-thread.html" . }}
+
+  {{ partial "comments.html" . }}
 </article>
 {{ end }}

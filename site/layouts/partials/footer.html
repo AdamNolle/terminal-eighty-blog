@@ -1,34 +1,15 @@
-{{/* Structured data for SEO */}}
-{{ if .IsPage }}
-<script type="application/ld+json">
-{
-    "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    "headline": {{ .Title | jsonify }},
-    "datePublished": {{ .Date.Format "2006-01-02T15:04:05Z07:00" | jsonify }},
-    {{ with .Lastmod }}"dateModified": {{ .Format "2006-01-02T15:04:05Z07:00" | jsonify }},{{ end }}
-    "author": {
-        "@type": "Person",
-        "name": {{ .Site.Params.author | jsonify }}
-    },
-    "publisher": {
-        "@type": "Organization",
-        "name": {{ .Site.Title | jsonify }}
-    },
-    "description": {{ with .Description }}{{ . | jsonify }}{{ else }}{{ .Summary | plainify | truncate 160 | jsonify }}{{ end }},
-    "url": {{ .Permalink | jsonify }},
-    "mainEntityOfPage": {
-        "@type": "WebPage",
-        "@id": {{ .Permalink | jsonify }}
-    }
-}
-</script>
-{{ end }}
-
-<footer class="site-footer">
-    <div class="footer-inner">
-        <span>&copy; {{ now.Year }} {{ .Site.Title }}</span>
-        <span class="footer-sep">·</span>
-        <span>{{ .Site.Params.tagline }}</span>
+<footer class="footer" role="contentinfo">
+  <div class="footer-inner">
+    <div class="footer-l">
+      <span class="tmark s24" aria-hidden="true"></span>
+      <span><b>{{ site.Title }}</b> &middot; a blog, by hand &middot; &copy; {{ now.Year }}</span>
     </div>
+    <nav class="footer-nav" aria-label="Footer">
+      <a href="{{ "/" | relURL }}">Writing</a>
+      <a href="{{ "/about/" | relURL }}">About</a>
+      {{ with site.Params.rssURL }}<a href="{{ . | relURL }}">RSS</a>{{ else }}<a href="{{ "index.xml" | relURL }}">RSS</a>{{ end }}
+    </nav>
+    <div class="footer-spacer"></div>
+    <div class="footer-r"><span class="pip" aria-hidden="true"></span> {{ site.Params.locationTag | default "NORTHWEST PACIFIC · HOSTED ON A PI" }}</div>
+  </div>
 </footer>

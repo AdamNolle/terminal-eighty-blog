@@ -1,172 +1,45 @@
-<!DOCTYPE html>
-<html lang="en">
-
+<!doctype html>
+<html lang="{{ site.Language.Lang | default "en" }}" data-theme="dark">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{ if .IsHome }}{{ .Site.Title }} — {{ .Site.Params.tagline }}{{ else }}{{ .Title }} — {{ .Site.Title }}{{ end }}</title>
-    <meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.tagline }}{{ end }}" />
-
-    {{/* Open Graph */}}
-    <meta property="og:title" content="{{ .Title | default .Site.Title }}" />
-    <meta property="og:description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.tagline }}{{ end }}" />
-    <meta property="og:type" content="{{ if .IsPage }}article{{ else }}website{{ end }}" />
-    <meta property="og:url" content="{{ .Permalink }}" />
-    <meta property="og:site_name" content="{{ .Site.Title }}" />
-
-    {{/* RSS */}}
-    {{ with .OutputFormats.Get "RSS" }}
-    <link rel="alternate" type="application/rss+xml" title="{{ $.Site.Title }}" href="{{ .Permalink }}" />
-    {{ end }}
-
-    {{/* Preload critical CSS */}}
-    <link rel="preload" href="{{ "css/screen.css" | relURL }}" as="style" />
-    <link rel="stylesheet" href="{{ "css/screen.css" | relURL }}" />
-
-    {{/* Instant dark mode (no flash) */}}
-    <script>
-        if (localStorage.getItem('theme') === 'dark') {
-            document.documentElement.setAttribute('data-theme', 'dark');
-        }
-    </script>
-
-    {{/* Umami Analytics */}}
-    {{ partial "analytics.html" . }}
+{{- /* FOUC-prevention: must run before stylesheet parses */ -}}
+<script>try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+{{ partial "head.html" . }}
 </head>
+<body data-page="{{ if and .IsPage (eq .Section "posts") }}post{{ else if .IsHome }}home{{ else if .IsPage }}page{{ else }}{{ .Kind }}{{ end }}">
 
-<body class="{{ with .Section }}page-{{ . }}{{ end }}{{ if .IsHome }} home-template{{ end }}">
+<a class="skip-link" href="#main">Skip to content</a>
 
-    <div class="viewport">
-        {{ partial "header.html" . }}
+<div class="app">
+  <div class="lava" aria-hidden="true">
+    <div class="lava-blob a"></div>
+    <div class="lava-blob b"></div>
+    <div class="lava-blob c"></div>
+  </div>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
 
-        <main>
-            {{ block "main" . }}{{ end }}
-        </main>
+  {{ partial "header.html" . }}
+
+  <main id="main" tabindex="-1">
+    {{ block "main" . }}{{ end }}
+  </main>
+
+  {{ partial "footer.html" . }}
+</div>
+
+{{- /* Cmd+K palette — rendered once at the body root so it's always available */ -}}
+<div id="cmdk" class="cmdk-back" role="dialog" aria-modal="true" aria-label="Search" hidden>
+  <div class="cmdk">
+    <div class="cmdk-input">
+      <span class="cmdk-prompt" aria-hidden="true">›</span>
+      <input type="text" placeholder="search posts, jump to a page…" autocomplete="off" spellcheck="false" aria-label="Search query" />
+      <span class="kbd" aria-hidden="true">esc</span>
     </div>
+    <div class="cmdk-list" role="listbox"></div>
+  </div>
+</div>
 
-    {{/* Search Modal */}}
-    <div id="search-overlay" class="search-overlay" style="display: none;">
-        <div class="search-modal">
-            <div class="search-header">
-                <input type="text" id="search-input" placeholder="Search posts..." autocomplete="off" autofocus />
-                <button id="search-close" class="header-btn">[X]</button>
-            </div>
-            <div id="search-results" class="search-results"></div>
-        </div>
-    </div>
-
-    {{ partial "footer.html" . }}
-
-    {{/* Theme toggle script */}}
-    <script>
-        const toggleBtn = document.getElementById('theme-toggle');
-        const html = document.documentElement;
-
-        function updateText() {
-            if (html.getAttribute('data-theme') === 'dark') {
-                toggleBtn.innerText = "[DARK]";
-            } else {
-                toggleBtn.innerText = "[LIGHT]";
-            }
-        }
-
-        // Run on load
-        updateText();
-
-        toggleBtn.addEventListener('click', () => {
-            if (html.getAttribute('data-theme') === 'dark') {
-                html.removeAttribute('data-theme');
-                localStorage.setItem('theme', 'light');
-            } else {
-                html.setAttribute('data-theme', 'dark');
-                localStorage.setItem('theme', 'dark');
-            }
-            updateText();
-            // Sync Remark42 theme if loaded
-            if (window.REMARK42) {
-                window.REMARK42.changeTheme(html.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
-            }
-        });
-    </script>
-
-    {{/* Search Script — Fuse.js from CDN */}}
-    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
-    <script>
-    (function() {
-        const overlay = document.getElementById('search-overlay');
-        const input = document.getElementById('search-input');
-        const results = document.getElementById('search-results');
-        const btnOpen = document.getElementById('search-toggle');
-        const btnClose = document.getElementById('search-close');
-        let fuse = null;
-
-        // Load search index
-        async function loadIndex() {
-            if (fuse) return;
-            try {
-                const res = await fetch('{{ "index.json" | relURL }}');
-                const data = await res.json();
-                fuse = new Fuse(data, {
-                    keys: [
-                        { name: 'title', weight: 0.4 },
-                        { name: 'content', weight: 0.3 },
-                        { name: 'tags', weight: 0.2 },
-                        { name: 'description', weight: 0.1 }
-                    ],
-                    threshold: 0.3,
-                    includeMatches: true
-                });
-            } catch(e) { console.error('Search index load failed', e); }
-        }
-
-        function openSearch() {
-            overlay.style.display = 'flex';
-            input.value = '';
-            results.innerHTML = '<p style="opacity:0.6;">Start typing to search...</p>';
-            input.focus();
-            loadIndex();
-        }
-
-        function closeSearch() {
-            overlay.style.display = 'none';
-        }
-
-        btnOpen.addEventListener('click', openSearch);
-        btnClose.addEventListener('click', closeSearch);
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSearch(); });
-
-        // Keyboard shortcut: / to open, Escape to close
-        document.addEventListener('keydown', (e) => {
-            if (e.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
-                e.preventDefault();
-                openSearch();
-            }
-            if (e.key === 'Escape') closeSearch();
-        });
-
-        input.addEventListener('input', () => {
-            const query = input.value.trim();
-            if (!query || !fuse) {
-                results.innerHTML = '<p style="opacity:0.6;">Start typing to search...</p>';
-                return;
-            }
-            const hits = fuse.search(query, { limit: 10 });
-            if (hits.length === 0) {
-                results.innerHTML = '<p style="opacity:0.6;">No results found.</p>';
-                return;
-            }
-            results.innerHTML = hits.map(h => {
-                const item = h.item;
-                const tagStr = item.tags ? item.tags.map(t => `[${t.toUpperCase()}]`).join(' ') : '';
-                return `<a href="${item.url}" class="search-result-item">
-                    <strong>${item.title}</strong>
-                    <span class="search-result-meta">${item.date} ${tagStr}</span>
-                    <span class="search-result-excerpt">${item.description || item.content.substring(0, 120) + '...'}</span>
-                </a>`;
-            }).join('');
-        });
-    })();
-    </script>
-
+<script type="module" src="{{ "js/app.js" | relURL }}"></script>
+{{ partial "analytics.html" . }}
 </body>
 </html>
