@@ -1,11 +1,23 @@
 // @ts-check
 /**
- * editor.js — minimal editor wiring for Phase 2.
+ * editor.js — page-level wiring for the admin post editor.
  *
- * Phase 2 deliberately ships a plain <textarea id="editor-fallback">
- * inside <div id="editor-root">. Phase 3 will replace this with a
- * TipTap + CodeMirror bundle mounted onto #editor-root and remove
- * the textarea. Look for the "// Phase 3:" comment below.
+ * Phase 3a swaps Phase 2's plain `<textarea id="editor-fallback">` for a
+ * TipTap + CodeMirror bundle (admin/public/js/editor.bundle.js). The
+ * bundle attaches `window.TEEditor.mount(rootEl, markdown, options)`
+ * which returns a textarea-compatible façade:
+ *
+ *   bodyEl.value (get/set Markdown)
+ *   bodyEl.addEventListener('input', fn)
+ *   bodyEl.selectionStart / .selectionEnd
+ *   bodyEl.setMode('wysiwyg' | 'source')
+ *   bodyEl.focus()
+ *   bodyEl.destroy()
+ *
+ * We mount once on boot and hold onto the instance. If the bundle fails
+ * to load (e.g., offline dev with no build, network blip), we fall back
+ * to the pre-rendered `<textarea id="editor-fallback">` so the page
+ * still works.
  *
  * Backend (unchanged):
  *   GET    /api/posts             → list
@@ -27,7 +39,11 @@
   const draftEl = $('post-draft');
   const tagsEl = $('post-tags');
   const descEl = $('post-desc');
-  const bodyEl = $('editor-fallback'); // Phase 3 replaces this
+  const editorRoot = $('editor-root');
+  // Phase 3a: `bodyEl` is the façade returned by the bundle's mount().
+  // It quacks like the old <textarea> so the rest of this file (and
+  // media.bindUploader) keeps working unchanged.
+  let bodyEl = $('editor-fallback');
   const btnSave = $('btn-save');
   const btnSave2 = $('btn-save-2');
   const btnPub = $('btn-publish');
@@ -243,8 +259,42 @@
     }
   }
 
+  // ── Mount the TipTap + CodeMirror editor (Phase 3a) ───────
+  //
+  // The bundle (admin/public/js/editor.bundle.js) attaches its public
+  // surface to window.TEEditor. We lift it onto window.TE.editor for
+  // consistency with the rest of TE.* helpers, then mount over
+  // #editor-root. If the bundle isn't available (build missing,
+  // network failure), we leave the pre-rendered <textarea> in place
+  // and the page degrades to plain Markdown editing.
+  function mountEditor() {
+    const TEEditor = /** @type {any} */ (window).TEEditor;
+    if (TEEditor && typeof TEEditor.mount === 'function' && editorRoot) {
+      if (window.TE && !window.TE.editor) window.TE.editor = TEEditor;
+      try {
+        // Hand over the textarea's current value (empty on first boot,
+        // hydrated later by loadPost) so the WYSIWYG renders from the
+        // same source the textarea would have shown.
+        const initial = (bodyEl && bodyEl.value) || '';
+        const instance = TEEditor.mount(editorRoot, initial, {
+          placeholder: 'Write your post in Markdown…',
+        });
+        // The façade is the new bodyEl. It exposes .value, .selectionStart,
+        // .selectionEnd, addEventListener('input'), .focus(), .setMode().
+        bodyEl = instance;
+        return true;
+      } catch (err) {
+        // Don't bring the page down; fall back to the prerendered textarea.
+        console.error('[editor] mount failed, using fallback textarea', err);
+      }
+    }
+    return false;
+  }
+
   // ── Wire DOM ──────────────────────────────────────────────
   function boot() {
+    mountEditor();
+
     // Title → slug auto-fill (only when slug is empty or matches the
     // previous auto-derived slug).
     let lastAutoSlug = '';
@@ -303,16 +353,6 @@
         },
       });
     }
-
-    // Phase 3: TipTap mount here
-    // ----------------------------
-    // Replace the textarea inside #editor-root with a TipTap editor.
-    // Keep these contracts intact:
-    //   - bodyEl.value (string)   — replace w/ editor.getMarkdown()
-    //   - bodyEl.input event      — call markDirty() + updateMetrics()
-    //   - selectionStart/End      — needed for media insertion above
-    // The savePost() flow already consumes a string `content`, so the
-    // bundle just needs to expose a textarea-compatible facade.
 
     // Initial state
     if (currentFile) {
