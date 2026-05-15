@@ -169,6 +169,34 @@
   };
 
   /**
+   * Trigger a re-run of the most recent conversion job for an asset.
+   * Used by the failed-state retry button in the library grid.
+   *
+   * @param {string} id
+   * @returns {Promise<any>}
+   */
+  media.retry = async function retryMedia(id) {
+    const res = await fetch(`/api/media/${encodeURIComponent(id)}/retry`, {
+      method: 'POST',
+      credentials: 'same-origin',
+    });
+    if (res.status === 401) {
+      window.location.href = '/login.html';
+      throw new Error('Not authenticated');
+    }
+    if (!res.ok) {
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        /* ignore */
+      }
+      throw new Error((data && (data.message || data.error)) || `Retry failed (${res.status})`);
+    }
+    return res.json();
+  };
+
+  /**
    * @param {string} id
    * @param {{ force?: boolean }} [opts]
    * @returns {Promise<void>}
@@ -383,8 +411,19 @@
             ? `<img loading="lazy" src="${TE.escape(m.url)}" alt="${TE.escape(m.original_name || m.filename)}" />`
             : `<span class="te-media-glyph" aria-hidden="true">${TYPE_ICONS[type] || TYPE_ICONS.other}</span>`;
         const subtitle = `${TE.escape(type.toUpperCase())} · ${TE.escape(TE.fmtBytes(m.size))}`;
+        // Phase 5: status overlay. 'processing' shows a shimmering badge,
+        // 'failed' surfaces a retry button. 'ready' (the common case)
+        // emits nothing so the card layout is unchanged.
+        const status = m.status || 'ready';
+        let statusBadge = '';
+        if (status === 'processing') {
+          statusBadge = `<span class="te-media-status processing" title="Converting…" aria-label="Converting">⟳ Converting</span>`;
+        } else if (status === 'failed') {
+          statusBadge = `<span class="te-media-status failed" title="Conversion failed" aria-label="Conversion failed">● Failed</span>
+            <button type="button" class="te-media-retry" data-retry-id="${TE.escape(m.id)}" aria-label="Retry conversion">Retry</button>`;
+        }
         return `
-        <div class="te-media-card ${sel ? 'is-selected' : ''}" data-id="${TE.escape(m.id)}" role="gridcell">
+        <div class="te-media-card ${sel ? 'is-selected' : ''} status-${TE.escape(status)}" data-id="${TE.escape(m.id)}" role="gridcell">
           <label class="te-media-check">
             <input type="checkbox" data-bulk-id="${TE.escape(m.id)}" ${sel ? 'checked' : ''}
                    aria-label="Select ${TE.escape(m.original_name || m.filename)}" />
@@ -392,6 +431,7 @@
           <button type="button" class="te-media-thumb" data-open-id="${TE.escape(m.id)}"
                   aria-label="Open details for ${TE.escape(m.original_name || m.filename)}">
             ${thumb}
+            ${statusBadge}
           </button>
           <div class="te-media-info">
             <span class="te-media-name" title="${TE.escape(m.original_name || m.filename)}">${TE.escape(m.original_name || m.filename)}</span>
@@ -400,6 +440,37 @@
         </div>`;
       })
       .join('');
+
+    // Phase 5: retry button (failed state only). Click rebounds the asset
+    // back to 'processing' and the next poll picks up the change.
+    grid.querySelectorAll('[data-retry-id]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-retry-id');
+        btn.setAttribute('disabled', 'true');
+        try {
+          await media.retry(id);
+          TE.toast('Retrying conversion…');
+          schedulePoll();
+          // Flip the local card to 'processing' immediately so the UI
+          // doesn't lag the next poll tick.
+          const card = btn.closest('.te-media-card');
+          if (card) {
+            card.classList.remove('status-failed');
+            card.classList.add('status-processing');
+          }
+        } catch (err) {
+          TE.toast(err.message || 'Retry failed.', 'error');
+          btn.removeAttribute('disabled');
+        }
+      });
+    });
+
+    // Phase 5: if any item is processing, kick off the poll loop so the
+    // badges update without a manual reload.
+    if (lib.items.some((m) => (m.status || 'ready') === 'processing')) {
+      schedulePoll();
+    }
 
     grid.querySelectorAll('input[data-bulk-id]').forEach((cb) => {
       cb.addEventListener('change', (e) => {
@@ -435,6 +506,43 @@
         if (next < 0 || next >= all.length) return;
         /** @type {HTMLElement} */ (all[next]).focus();
       });
+    });
+  }
+
+  // ── Status polling ─────────────────────────────────────────
+  // Light-touch poller: every POLL_INTERVAL while any visible item is
+  // 'processing', re-fetch the list and re-render. Stops automatically
+  // once every item is ready/failed. Tab-visibility-aware so a
+  // backgrounded tab doesn't keep hammering the server.
+  const POLL_INTERVAL_MS = 5000;
+  let pollTimer = 0;
+
+  function schedulePoll() {
+    if (pollTimer) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    pollTimer = window.setTimeout(async () => {
+      pollTimer = 0;
+      try {
+        await reload();
+      } catch (_) {
+        /* reload surfaces its own errors */
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (pollTimer) {
+          clearTimeout(pollTimer);
+          pollTimer = 0;
+        }
+      } else {
+        // Coming back to the tab — re-evaluate.
+        if (lib.items.some((m) => (m.status || 'ready') === 'processing')) {
+          schedulePoll();
+        }
+      }
     });
   }
 
@@ -676,7 +784,10 @@
         multiple: true,
         onUpload: async (files) => {
           await media.upload(files);
-          reload();
+          await reload();
+          // After upload, images come back as status='processing'.
+          // Trigger the poll so badges update without user intervention.
+          schedulePoll();
         },
       });
     }

@@ -23,6 +23,10 @@ import healthRoutes from './src/routes/health.js';
 // the first request. Safe to call on every boot; already-applied
 // migrations are tracked in the `schema_migrations` table.
 import { runMigrations } from './src/db/migrate.js';
+// Phase 5: conversion job worker. Started after migrations so the
+// `conversion_jobs` table is guaranteed to exist before the worker
+// opens its read cursor. SIGTERM/SIGINT bind a graceful drain.
+import { startWorker, bindShutdownSignals } from './src/services/conversion/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -41,6 +45,18 @@ try {
 } catch (err) {
   console.error('Fatal: migrations failed to apply:', err);
   process.exit(1);
+}
+
+// Phase 5: launch the conversion worker. Concurrency defaults to 2 (Pi
+// budget) but is overridable via CONVERSION_CONCURRENCY for beefier
+// hosts. SIGTERM/SIGINT trigger a graceful drain.
+if (process.env.CONVERSION_WORKER !== 'off') {
+  try {
+    startWorker();
+    bindShutdownSignals();
+  } catch (workerErr) {
+    console.error('[conversion-worker] failed to start:', workerErr);
+  }
 }
 
 // Trust proxy (behind Caddy/Cloudflare)

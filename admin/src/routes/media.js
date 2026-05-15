@@ -51,6 +51,10 @@ import { tmpdir } from 'os';
 
 import { classifyMime, isDeniedExtension, computeStoragePath } from '../utils/mediaTypes.js';
 import { invalidatePostRefs, postsReferencing } from '../utils/postRefs.js';
+// Phase 5: conversion queue producer + retry plumbing. The worker
+// (started by server.js) drains rows from `conversion_jobs`; here we
+// only enqueue and trigger retries.
+import { enqueueJob, retryJob, latestJobForMedia } from '../services/conversion/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const router = Router();
@@ -93,6 +97,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_media_uploaded_at ON media(uploaded_at);
   CREATE INDEX IF NOT EXISTS idx_media_hash ON media(hash);
   CREATE INDEX IF NOT EXISTS idx_media_mime ON media(mime_type);
+
+  -- Phase 5: idempotent mirror of migration 003 so tests that import
+  -- this router without invoking the migration runner still find the
+  -- conversion_jobs table they need.
+  CREATE TABLE IF NOT EXISTS conversion_jobs (
+    id TEXT PRIMARY KEY,
+    media_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempt INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 3,
+    queued_at INTEGER NOT NULL,
+    started_at INTEGER,
+    finished_at INTEGER,
+    error TEXT,
+    FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_jobs_status ON conversion_jobs(status, queued_at);
+  CREATE INDEX IF NOT EXISTS idx_jobs_media ON conversion_jobs(media_id);
 `);
 
 // ── Multer ────────────────────────────────────────────────────────
@@ -227,18 +250,29 @@ function diskPathFor(row) {
   return join(STATIC_DIR, category, derivePathFromUploadedAt(row.uploaded_at), row.filename);
 }
 
-// Phase 5 hook — replace this stub with a queue producer once the
-// conversion pipeline lands. Returning false leaves status='ready'.
-// The row argument is the freshly-inserted media DB record so the
-// queue consumer can fetch the on-disk path and dispatch the right
-// processor (ffmpeg, sharp, etc.). For Phase 4 we accept it and
-// drop it on the floor.
+// Phase 5: pick a job type for the asset and enqueue it. SVGs flow
+// through `image` too because the handler sanitizes them inline. GIFs
+// route to `image` first so we can read metadata; the image handler
+// detects animated frames and queues a follow-up `gif` job for the
+// Phase 5b ffmpeg transcoder.
+//
+// Returns true when a job was queued (so the upload handler can mark
+// `media.status='processing'`). Non-image uploads return false and the
+// row stays at `status='ready'`.
 /**
- * @param {Record<string, any>} _row
- * @returns {boolean} whether a conversion was queued
+ * @param {Record<string, any>} row
+ * @returns {boolean}
  */
-function enqueueConversion(_row) {
-  return false;
+function enqueueConversion(row) {
+  const type = classifyMime(row.mime_type);
+  if (type !== 'image') return false;
+  try {
+    enqueueJob(row.id, 'image', { db });
+    return true;
+  } catch (err) {
+    console.warn('[media] conversion enqueue failed:', err);
+    return false;
+  }
 }
 
 // ── Routes ────────────────────────────────────────────────────────
@@ -551,6 +585,32 @@ router.delete('/:id', (req, res) => {
   db.prepare('DELETE FROM media WHERE id = ?').run(req.params.id);
   invalidatePostRefs();
   res.status(204).end();
+});
+
+/**
+ * POST /api/media/:id/retry — re-queue the most recent conversion job
+ * for the given media row. Returns 200 on success, 404 if no job exists
+ * for the media, 409 if there's nothing to retry (status already 'ready'
+ * with no pending work).
+ *
+ * The retry resets `attempt=0` and `queued_at=now()`. Phase 5 worker
+ * picks it up on the next 1 Hz tick.
+ */
+router.post('/:id/retry', (req, res) => {
+  const row = db.prepare('SELECT * FROM media WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  const job = latestJobForMedia(req.params.id, { db });
+  if (!job) {
+    // No prior job — start a fresh one if the asset still warrants one
+    // (an image upload that somehow skipped enqueue).
+    if (classifyMime(row.mime_type) === 'image') {
+      const queued = enqueueJob(row.id, 'image', { db });
+      return res.json({ retried: true, job_id: queued.id });
+    }
+    return res.status(409).json({ error: 'no_job_for_media' });
+  }
+  retryJob(job.id, { db });
+  res.json({ retried: true, job_id: job.id });
 });
 
 // ── Phase 2 compat: list-as-array endpoint ────────────────────────
