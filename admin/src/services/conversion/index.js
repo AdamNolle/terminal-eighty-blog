@@ -22,27 +22,17 @@ import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
 
 import { processImage } from './image.js';
+import { processVideo } from './video.js';
+import { processAudio } from './audio.js';
+import { processGifVideo } from './gif.js';
 import { classifyMime } from '../../utils/mediaTypes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Placeholder handler for animated GIFs. Phase 5b will replace this with
- * an ffmpeg-driven MP4 + WebM transcode. For now we just no-op so the
- * `processing` flag clears and the original GIF stays servable.
- *
- * @returns {Promise<{ conversions: Record<string, string>, mediaPatch: Record<string, any> }>}
- */
-async function gifPlaceholderHandler() {
-  // Intentionally a no-op. The row is preserved at status='ready' once
-  // this returns and the WebP/AVIF transcode catches up in Phase 5b.
-  return { conversions: {}, mediaPatch: {} };
-}
-
-/**
- * Placeholder factory for handlers we haven't implemented yet. Phase 5b/c
+ * Placeholder factory for handlers we haven't implemented yet. Phase 5c
  * will swap these out. We deliberately throw so a misrouted job (e.g.
- * an image upload that someone enqueued as 'video') is loud rather than
+ * an image upload that someone enqueued as 'pdf') is loud rather than
  * silently appearing successful.
  *
  * @param {string} kind
@@ -60,10 +50,10 @@ function notImplemented(kind) {
  */
 export const handlers = {
   image: processImage,
-  gif: gifPlaceholderHandler,
-  // Phase 5b — replace these with the ffmpeg-backed transcoders.
-  video: notImplemented('video'),
-  audio: notImplemented('audio'),
+  // Phase 5b — ffmpeg-backed A/V transcoders + animated-GIF→video.
+  video: processVideo,
+  audio: processAudio,
+  gif: processGifVideo,
   // Phase 5c — PDF text-extraction, code highlighting, archive listing.
   pdf: notImplemented('pdf'),
   code: notImplemented('code'),

@@ -254,20 +254,26 @@ function diskPathFor(row) {
 // through `image` too because the handler sanitizes them inline. GIFs
 // route to `image` first so we can read metadata; the image handler
 // detects animated frames and queues a follow-up `gif` job for the
-// Phase 5b ffmpeg transcoder.
+// Phase 5b ffmpeg transcoder. Video/audio enqueue their own ffmpeg job
+// directly (image classification doesn't apply).
 //
 // Returns true when a job was queued (so the upload handler can mark
-// `media.status='processing'`). Non-image uploads return false and the
-// row stays at `status='ready'`.
+// `media.status='processing'`). Phase 5c will extend this with PDF /
+// code / archive routing; until then those types stay at status='ready'.
 /**
  * @param {Record<string, any>} row
  * @returns {boolean}
  */
 function enqueueConversion(row) {
   const type = classifyMime(row.mime_type);
-  if (type !== 'image') return false;
+  /** @type {'image' | 'video' | 'audio' | null} */
+  let jobType = null;
+  if (type === 'image') jobType = 'image';
+  else if (type === 'video') jobType = 'video';
+  else if (type === 'audio') jobType = 'audio';
+  if (!jobType) return false;
   try {
-    enqueueJob(row.id, 'image', { db });
+    enqueueJob(row.id, jobType, { db });
     return true;
   } catch (err) {
     console.warn('[media] conversion enqueue failed:', err);
@@ -602,9 +608,16 @@ router.post('/:id/retry', (req, res) => {
   const job = latestJobForMedia(req.params.id, { db });
   if (!job) {
     // No prior job — start a fresh one if the asset still warrants one
-    // (an image upload that somehow skipped enqueue).
-    if (classifyMime(row.mime_type) === 'image') {
-      const queued = enqueueJob(row.id, 'image', { db });
+    // (e.g. an image upload that somehow skipped enqueue, or a re-queue
+    // of a video/audio whose original job row was pruned).
+    const cls = classifyMime(row.mime_type);
+    /** @type {'image' | 'video' | 'audio' | null} */
+    let fallback = null;
+    if (cls === 'image') fallback = 'image';
+    else if (cls === 'video') fallback = 'video';
+    else if (cls === 'audio') fallback = 'audio';
+    if (fallback) {
+      const queued = enqueueJob(row.id, fallback, { db });
       return res.json({ retried: true, job_id: queued.id });
     }
     return res.status(409).json({ error: 'no_job_for_media' });
