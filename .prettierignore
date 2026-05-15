@@ -3,7 +3,7 @@ node_modules/
 site/public/
 site/resources/
 admin/data/
-admin/public/
+admin/public/fonts/
 Blog/
 .planning/
 coverage/

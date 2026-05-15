@@ -1,156 +1,321 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editor - Terminal Eighty CMS</title>
-    <link rel="stylesheet" href="/css/admin.css">
-    
-    <!-- Code Highlight CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    
-    <!-- ES Module Import Map for TipTap -->
-    <script type="importmap">
-        {
-            "imports": {
-                "@tiptap/core": "https://esm.sh/@tiptap/core@2.2.4",
-                "@tiptap/starter-kit": "https://esm.sh/@tiptap/starter-kit@2.2.4",
-                "@tiptap/extension-image": "https://esm.sh/@tiptap/extension-image@2.2.4",
-                "@tiptap/extension-link": "https://esm.sh/@tiptap/extension-link@2.2.4",
-                "@tiptap/extension-placeholder": "https://esm.sh/@tiptap/extension-placeholder@2.2.4",
-                "@tiptap/extension-code-block-lowlight": "https://esm.sh/@tiptap/extension-code-block-lowlight@2.2.4",
-                "lowlight": "https://esm.sh/lowlight@3.1.0",
-                "markdown-it": "https://esm.sh/markdown-it@14.0.0",
-                "turndown": "https://esm.sh/turndown@7.1.3",
-                "turndown-plugin-gfm": "https://esm.sh/turndown-plugin-gfm@1.0.2"
-            }
-        }
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <script>
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
     </script>
-</head>
-<body>
-    <div class="container" style="max-width: 1600px;">
-        <header class="admin-header">
-            <h1>
-                <a href="/" style="color: inherit; display: flex; align-items: center; gap: 15px;">
-                    <div class="header-green-box"></div>
-                    TERMINAL EIGHTY
-                </a>
-            </h1>
-            <div class="nav-links">
-                <button id="btn-theme" class="btn">[DARK]</button>
-                <span id="editor-metrics" style="opacity: 0.8; font-size: 0.9em; color: var(--terminal-green);">0 words | 0 min</span>
-                <span id="save-status" style="opacity: 0.7;"></span>
-                <button id="btn-save" class="btn">[SAVE DRAFT]</button>
-                <button id="btn-publish" class="btn primary">[SAVE & PUBLISH]</button>
-            </div>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Editor — Terminal Eighty // Admin</title>
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/css/fonts.css" />
+    <link rel="stylesheet" href="/css/admin.css" />
+    <link rel="stylesheet" href="/css/editor.css" />
+    <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+  </head>
+  <body data-page="editor">
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <div class="backdrop" aria-hidden="true">
+      <div class="lava-blob a"></div>
+      <div class="lava-blob b"></div>
+    </div>
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
+    <div class="shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <a class="side-brand" href="/index.html">
+          <span class="tmark s32" aria-hidden="true"></span>
+          <span class="name">
+            TERMINAL<b>EIGHTY</b>
+            <span>· ADMIN · REV 2.0</span>
+          </span>
+        </a>
+        <nav class="side-group" aria-label="Workspace">
+          <div class="side-group-label">Workspace</div>
+          <a class="side-item" href="/index.html"
+            ><span class="ico" aria-hidden="true">⌂</span><span>Dashboard</span><span></span
+          ></a>
+          <a class="side-item active" aria-current="page" href="/editor.html"
+            ><span class="ico" aria-hidden="true">≡</span><span>Editor</span><span></span
+          ></a>
+          <a class="side-item" href="/index.html#media"
+            ><span class="ico" aria-hidden="true">▦</span><span>Media</span><span></span
+          ></a>
+        </nav>
+        <nav class="side-group" aria-label="System">
+          <div class="side-group-label">System</div>
+          <a class="side-item" href="/index.html#stats"
+            ><span class="ico" aria-hidden="true">∿</span><span>Stats</span><span></span
+          ></a>
+          <a class="side-item" href="/index.html#settings"
+            ><span class="ico" aria-hidden="true">◐</span><span>Settings</span><span></span
+          ></a>
+        </nav>
+        <div class="side-foot">
+          <div class="row">
+            <span><span class="pip"></span>EDITING</span
+            ><span><b id="editor-side-status">Draft</b></span>
+          </div>
+          <div class="row"><span>WORDS</span><span id="editor-side-words">0</span></div>
+          <div class="row"><span>READ</span><span id="editor-side-read">0 min</span></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="crumb">
+            <a
+              href="/index.html"
+              style="
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                color: inherit;
+                text-decoration: none;
+              "
+            >
+              <span class="tmark s24" aria-hidden="true"></span>
+              <span>Posts</span>
+            </a>
+            <span aria-hidden="true">/</span>
+            <span><b id="crumb-editor">New post</b></span>
+          </div>
+          <div class="topbar-spacer"></div>
+          <span class="editor-metrics" aria-live="polite"
+            ><b id="editor-words">0 words</b> · <span id="editor-read">0 min</span></span
+          >
+          <span class="ed-saved" id="save-status" aria-live="polite"></span>
+          <div class="topbar-actions">
+            <button
+              type="button"
+              class="btn ghost"
+              id="btn-theme"
+              title="Toggle theme"
+              aria-pressed="false"
+              aria-label="Toggle theme"
+            >
+              <span id="btn-theme-glyph" aria-hidden="true">☾</span>
+            </button>
+            <button type="button" class="btn" id="btn-save">Save draft</button>
+            <button type="button" class="btn solid" id="btn-publish">Save & publish</button>
+          </div>
         </header>
 
-        <div class="editor-layout">
-            
-            <!-- TipTap Editor -->
-            <div class="tiptap-container">
-                <div class="editor-toolbar" id="toolbar">
-                    <button data-cmd="bold">B</button>
-                    <button data-cmd="italic">I</button>
-                    <button data-cmd="strike">S</button>
-                    <span style="border-right: 1px solid #555; margin: 0 5px;"></span>
-                    <button data-cmd="h1">H1</button>
-                    <button data-cmd="h2">H2</button>
-                    <button data-cmd="h3">H3</button>
-                    <span style="border-right: 1px solid #555; margin: 0 5px;"></span>
-                    <button data-cmd="bulletList">• List</button>
-                    <button data-cmd="orderedList">1. List</button>
-                    <button data-cmd="blockquote">Quote</button>
-                    <button data-cmd="codeBlock">Code</button>
-                    <span style="border-right: 1px solid #555; margin: 0 5px;"></span>
-                    <button id="btn-link">Link</button>
-                    <button id="btn-image">Image</button>
-                    <span style="flex-grow: 1;"></span>
-                    <button id="btn-toggle-md">Markdown Source</button>
+        <div id="main" class="stage">
+          <div class="editor-layout">
+            <!-- ============ EDITOR PANE ============ -->
+            <section class="editor-pane" aria-label="Post body">
+              <div class="editor-head">
+                <span class="ed-pill" id="ed-status-pill">DRAFT</span>
+                <span class="ed-saved"
+                  ><span class="pip" aria-hidden="true"></span
+                  ><span id="ed-saved-text">Unsaved</span></span
+                >
+                <div class="editor-head-r">
+                  <button
+                    type="button"
+                    class="btn ghost"
+                    id="btn-preview"
+                    title="Preview (Phase 3)"
+                  >
+                    Preview
+                  </button>
+                  <button
+                    type="button"
+                    class="btn danger ghost"
+                    id="btn-delete"
+                    style="display: none"
+                  >
+                    Delete
+                  </button>
                 </div>
-                
-                <!-- The actual editor elements -->
-                <div id="editor-element" style="flex-grow: 1; display: flex; flex-direction: column;"></div>
-                <textarea id="markdown-source" style="display: none; flex-grow: 1; border: none; resize: none; padding: 20px; font-size: 1.1em;" autocomplete="off" spellcheck="false"></textarea>
-            </div>
+              </div>
 
-            <!-- Frontmatter Sidebar -->
-            <div class="sidebar">
-                <div class="form-group">
-                    <label>Title</label>
-                    <input type="text" id="post-title" placeholder="Post Title">
+              <div class="ed-title-wrap">
+                <label class="sr-only" for="post-title">Post title</label>
+                <input
+                  class="ed-title"
+                  id="post-title"
+                  placeholder="Untitled post"
+                  autocomplete="off"
+                  spellcheck="true"
+                />
+                <div class="ed-slug">
+                  <span class="root">terminaleighty.com/posts/</span>
+                  <label class="sr-only" for="post-slug">Slug</label>
+                  <input id="post-slug" placeholder="post-slug" autocomplete="off" />
                 </div>
-                
-                <div class="form-group">
-                    <label>Slug (URL)</label>
-                    <input type="text" id="post-slug" placeholder="post-title">
+              </div>
+
+              <div class="ed-body">
+                <!-- Phase 3: TipTap mount here.
+                   The fallback textarea is shown until Phase 3 wires
+                   a rich-text editor into #editor-root. -->
+                <div id="editor-root" data-phase="2-fallback">
+                  <noscript>
+                    <p style="color: var(--danger); font-family: var(--mono); font-size: 12px">
+                      JavaScript required to edit posts.
+                    </p>
+                  </noscript>
+                  <label class="sr-only" for="editor-fallback">Post body (Markdown)</label>
+                  <textarea
+                    id="editor-fallback"
+                    placeholder="Write your post in Markdown… Phase 3 swaps this for TipTap + CodeMirror."
+                    spellcheck="true"
+                    autocomplete="off"
+                  ></textarea>
                 </div>
-                
-                <div class="form-group">
-                    <label>Status</label>
-                    <select id="post-draft" style="width: 100%; padding: 8px; background: var(--bg-color); color: var(--ink-color); border: 2px solid var(--ink-color); font-family: var(--font-mono);">
-                        <option value="true">Draft</option>
-                        <option value="false">Published</option>
+              </div>
+
+              <div class="editor-foot">
+                <span
+                  ><span id="foot-words">0</span> words ·
+                  <span id="foot-read">0 min</span> read</span
+                >
+                <div class="editor-foot-r">
+                  <span id="foot-file" style="color: var(--fg-mute)"></span>
+                </div>
+              </div>
+            </section>
+
+            <!-- ============ FRONTMATTER SIDEBAR ============ -->
+            <aside class="ed-side" aria-label="Post settings">
+              <details class="ed-panel" open>
+                <summary>
+                  <span>Frontmatter</span><span class="chev" aria-hidden="true">›</span>
+                </summary>
+                <div class="body">
+                  <div class="field">
+                    <label for="post-date">Publish date</label>
+                    <input type="datetime-local" id="post-date" />
+                  </div>
+                  <div class="field">
+                    <label for="post-draft">Status</label>
+                    <select id="post-draft">
+                      <option value="true">Draft</option>
+                      <option value="false">Published</option>
                     </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Date</label>
-                    <input type="datetime-local" id="post-date">
-                </div>
-
-                <div class="form-group">
-                    <label>Tags (comma separated)</label>
-                    <input type="text" id="post-tags" list="tag-suggestions" placeholder="tech, thoughts, code" autocomplete="off">
+                  </div>
+                  <div class="field">
+                    <label for="post-tags"
+                      >Tags
+                      <span style="text-transform: none; color: var(--fg-mute)"
+                        >(comma-separated)</span
+                      ></label
+                    >
+                    <input
+                      type="text"
+                      id="post-tags"
+                      placeholder="tech, thoughts, code"
+                      autocomplete="off"
+                      list="tag-suggestions"
+                    />
                     <datalist id="tag-suggestions"></datalist>
+                  </div>
                 </div>
+              </details>
 
-                <div class="form-group" style="flex-grow: 1;">
-                    <label>Excerpt / Description</label>
-                    <textarea id="post-desc" style="height: 100%; min-height: 100px; resize: none;" placeholder="Short summary for SEO and post cards"></textarea>
-                </div>
-
-                <div class="form-group" style="margin-top: 15px;">
-                    <label>Social Preview</label>
-                    <div id="social-preview" style="border: 1px solid #555; border-radius: 8px; overflow: hidden; background: var(--bg-color);">
-                        <div style="padding: 10px; border-bottom: 1px solid #555;">
-                            <div style="font-size: 0.8em; color: #888;">terminaleighty.com</div>
-                            <div id="sp-title" style="font-weight: bold; margin: 5px 0; color: var(--terminal-green);">Post Title</div>
-                            <div id="sp-desc" style="font-size: 0.85em; opacity: 0.8; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">Description will appear here...</div>
-                        </div>
+              <details class="ed-panel" open>
+                <summary><span>SEO</span><span class="chev" aria-hidden="true">›</span></summary>
+                <div class="body">
+                  <div class="field">
+                    <label for="post-desc">Meta description</label>
+                    <textarea
+                      id="post-desc"
+                      rows="3"
+                      placeholder="A short summary for search engines and social cards."
+                    ></textarea>
+                  </div>
+                  <div class="field">
+                    <label>Social preview</label>
+                    <div class="social-preview" aria-hidden="true">
+                      <div class="domain">terminaleighty.com</div>
+                      <div class="title" id="sp-title">Post title</div>
+                      <div class="desc" id="sp-desc">Description appears here…</div>
                     </div>
+                  </div>
                 </div>
-                
-                <div class="form-group" style="margin-top: auto; border-top: 1px solid #555; padding-top: 15px;">
-                    <button id="btn-delete" style="width: 100%; color: var(--terminal-red); border-color: var(--terminal-red); display: none;">DELETE POST</button>
-                </div>
-            </div>
+              </details>
 
+              <details class="ed-panel">
+                <summary><span>Media</span><span class="chev" aria-hidden="true">›</span></summary>
+                <div class="body">
+                  <div
+                    class="ed-dropzone"
+                    id="ed-dropzone"
+                    tabindex="0"
+                    role="button"
+                    aria-label="Upload image"
+                  >
+                    <span class="ico" aria-hidden="true">↥</span>
+                    <span>Drop file or click to upload</span>
+                  </div>
+                  <input
+                    type="file"
+                    id="ed-file-input"
+                    accept="image/*,video/*"
+                    style="display: none"
+                  />
+                  <div class="recent-media" id="ed-recent-media" aria-live="polite"></div>
+                  <p
+                    style="
+                      margin: 10px 0 0;
+                      color: var(--fg-mute);
+                      font-size: 10.5px;
+                      letter-spacing: 0.06em;
+                      text-transform: uppercase;
+                    "
+                  >
+                    Phase 5 adds processing status
+                  </p>
+                </div>
+              </details>
+
+              <details class="ed-panel" open>
+                <summary>
+                  <span>Publish</span><span class="chev" aria-hidden="true">›</span>
+                </summary>
+                <div class="body" style="display: flex; flex-direction: column; gap: 10px">
+                  <button type="button" class="btn" id="btn-save-2" style="justify-content: center">
+                    Save draft
+                  </button>
+                  <button
+                    type="button"
+                    class="btn solid"
+                    id="btn-publish-2"
+                    style="justify-content: center"
+                  >
+                    Save & publish
+                  </button>
+                  <p
+                    style="
+                      margin: 4px 0 0;
+                      color: var(--fg-mute);
+                      font-size: 10.5px;
+                      letter-spacing: 0.06em;
+                    "
+                  >
+                    ⌘S saves. Autosave every 10s after typing stops.
+                  </p>
+                </div>
+              </details>
+            </aside>
+          </div>
         </div>
+      </main>
     </div>
 
-    <!-- Image Selector Modal -->
-    <div id="image-modal" class="modal" style="display: none;">
-        <div class="modal-content panel">
-            <div class="panel-header">
-                <span>[ SELECT IMAGE ]</span>
-                <button id="btn-close-image-modal" style="padding: 2px 5px">X</button>
-            </div>
-            <div class="panel-content">
-                <button id="btn-upload-new" class="btn primary" style="margin-bottom: 15px;">Upload New Image</button>
-                <div id="image-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; max-height: 400px; overflow-y: auto;">
-                    Loading images...
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="toast-root" role="status" aria-live="polite" aria-atomic="false"></div>
 
-    <!-- Hidden file input for image uploads -->
-    <input type="file" id="image-upload-input" style="display: none;" accept="image/*,video/*">
-
-    <div id="toast" class="toast">Action completed.</div>
-
-    <script src="/js/theme.js"></script>
-    <script type="module" src="/js/editor.js"></script>
-</body>
+    <script src="/js/common.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/media.js"></script>
+    <script src="/js/editor.js"></script>
+  </body>
 </html>

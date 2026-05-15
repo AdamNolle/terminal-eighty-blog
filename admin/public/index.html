@@ -1,138 +1,388 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Terminal Eighty CMS</title>
-    <link rel="stylesheet" href="/css/admin.css">
-    <link rel="manifest" href="/manifest.json">
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <!-- FOUC theme script — must run before any paint -->
+    <script>
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    </script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Terminal Eighty // Admin</title>
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/css/fonts.css" />
+    <link rel="stylesheet" href="/css/admin.css" />
+    <link rel="stylesheet" href="/css/dashboard.css" />
+    <!-- WebAuthn browser library (CDN — passkey registration). Wrapped
+       in try/catch in auth.js so an ad-blocker doesn't crash the page. -->
     <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
-</head>
-<body>
-    <div class="container">
-        <header class="admin-header">
-            <h1>
-                <div class="header-green-box"></div>
-                TERMINAL EIGHTY // ADMIN
-            </h1>
-            <div class="nav-links">
-                <button id="btn-theme" class="btn">[DARK]</button>
-                <a href="https://comments.terminaleighty.com/web/" target="_blank" class="btn">[COMMENTS]</a>
-                <button id="btn-terminal" class="btn">[TERMINAL]</button>
-                <a href="/editor.html" class="btn primary">[+ NEW POST]</a>
-                <button id="btn-publish" class="btn">[PUBLISH]</button>
-                <button id="btn-logout" class="btn">[LOGOUT]</button>
-            </div>
+  </head>
+  <body data-page="dashboard">
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <!-- Backdrop layers -->
+    <div class="backdrop" aria-hidden="true">
+      <div class="lava-blob a"></div>
+      <div class="lava-blob b"></div>
+    </div>
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
+    <div class="shell">
+      <!-- ============ SIDEBAR ============ -->
+      <aside class="sidebar" aria-label="Main navigation">
+        <a class="side-brand" href="/index.html">
+          <span class="tmark s32" aria-hidden="true"></span>
+          <span class="name">
+            TERMINAL<b>EIGHTY</b>
+            <span>· ADMIN · REV 2.0</span>
+          </span>
+        </a>
+
+        <nav class="side-group" aria-label="Workspace">
+          <div class="side-group-label">Workspace</div>
+          <a class="side-item" href="/index.html" aria-current="page" data-route="dashboard">
+            <span class="ico" aria-hidden="true">⌂</span><span>Dashboard</span><span></span>
+          </a>
+          <a class="side-item" href="/index.html#posts" data-route="posts">
+            <span class="ico" aria-hidden="true">≡</span><span>Posts</span
+            ><span class="badge ok" id="side-badge-posts">—</span>
+          </a>
+          <a class="side-item" href="/index.html#media" data-route="media">
+            <span class="ico" aria-hidden="true">▦</span><span>Media</span><span></span>
+          </a>
+          <a
+            class="side-item"
+            href="https://comments.terminaleighty.com/web/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span class="ico" aria-hidden="true">»</span><span>Comments</span><span></span>
+          </a>
+        </nav>
+
+        <nav class="side-group" aria-label="System">
+          <div class="side-group-label">System</div>
+          <a class="side-item" href="/index.html#stats" data-route="stats">
+            <span class="ico" aria-hidden="true">∿</span><span>Stats</span><span></span>
+          </a>
+          <a class="side-item" href="/index.html#settings" data-route="settings">
+            <span class="ico" aria-hidden="true">◐</span><span>Settings</span><span></span>
+          </a>
+          <button type="button" class="side-item" id="btn-open-terminal" data-route="terminal">
+            <span class="ico" aria-hidden="true">_</span><span>Terminal</span><span></span>
+          </button>
+        </nav>
+
+        <div class="side-foot">
+          <div class="row">
+            <span><span class="pip" id="side-pip"></span>SYSTEM</span
+            ><span><b id="side-system">…</b></span>
+          </div>
+          <div class="row"><span>UPTIME</span><span class="uptime" id="side-uptime">—</span></div>
+          <div class="row"><span>CPU</span><span id="side-cpu">—</span></div>
+          <div class="row">
+            <span>BUILD</span><span><b>v2.0</b></span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ============ MAIN ============ -->
+      <main class="main">
+        <header class="topbar">
+          <div class="crumb">
+            <span class="tmark s24" aria-hidden="true"></span>
+            <span>· <b id="crumb-section">Dashboard</b></span>
+          </div>
+          <div class="topbar-spacer"></div>
+          <div class="topbar-search" role="search">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <label for="topbar-search-input" class="sr-only">Search posts</label>
+            <input id="topbar-search-input" placeholder="Search posts…" autocomplete="off" />
+            <span class="kbd">⌘K</span>
+          </div>
+          <div class="topbar-actions">
+            <button
+              type="button"
+              class="btn ghost"
+              id="btn-theme"
+              title="Toggle theme"
+              aria-pressed="false"
+              aria-label="Toggle theme"
+            >
+              <span id="btn-theme-glyph" aria-hidden="true">☾</span>
+            </button>
+            <a
+              class="btn"
+              href="https://terminaleighty.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              >View site →</a
+            >
+            <button type="button" class="btn" id="btn-publish">Publish site</button>
+            <a class="btn solid" href="/editor.html">+ New Post</a>
+            <button
+              type="button"
+              class="btn ghost"
+              id="btn-logout"
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              ⏏
+            </button>
+          </div>
         </header>
 
-        <div class="dashboard-grid">
-            
-            <!-- Left Column: Posts -->
-            <div class="panel">
-                <div class="panel-header">
-                    <span>[ POSTS ]</span>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <input type="text" id="post-search" placeholder="Search posts..." style="background: var(--bg-color); color: var(--ink-color); border: 1px solid #555; padding: 2px 5px; font-family: var(--font-mono); width: 150px;">
-                        <span id="post-count">Loading...</span>
-                    </div>
-                </div>
-                <div class="panel-content">
-                    <ul class="post-list" id="post-list-el">
-                        <li>Loading posts...</li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Right Column: System & Settings -->
+        <div id="main" class="stage">
+          <div class="sec-head">
             <div>
-                <!-- Health Dashboard -->
-                <div class="panel" style="margin-bottom: 30px;">
-                    <div class="panel-header">
-                        <span>[ PI HEALTH ]</span>
-                        <span id="health-uptime">...</span>
-                    </div>
-                    <div class="panel-content">
-                        <!-- CPU -->
-                        <div class="health-stat">
-                            <span class="health-label">CPU</span>
-                            <span class="health-value" id="gauge-val-cpu">0%</span>
-                            <div class="gauge-container">
-                                <div class="gauge-bar" id="gauge-bar-cpu" style="width: 0%"></div>
-                            </div>
-                        </div>
-                        <!-- RAM -->
-                        <div class="health-stat">
-                            <span class="health-label">RAM</span>
-                            <span class="health-value" id="gauge-val-ram">0%</span>
-                            <div class="gauge-container">
-                                <div class="gauge-bar" id="gauge-bar-ram" style="width: 0%"></div>
-                            </div>
-                        </div>
-                        <!-- Temp -->
-                        <div class="health-stat">
-                            <span class="health-label">TEMP</span>
-                            <span class="health-value" id="gauge-val-temp">0°C</span>
-                            <div style="flex-grow: 1" id="gauge-status-temp">🟢 OK</div>
-                        </div>
-                        <!-- Disk -->
-                        <div class="health-stat" style="margin-bottom: 20px;">
-                            <span class="health-label">DISK</span>
-                            <span class="health-value" id="gauge-val-disk">0%</span>
-                            <div class="gauge-container">
-                                <div class="gauge-bar" id="gauge-bar-disk" style="width: 0%"></div>
-                            </div>
-                        </div>
+              <h1 class="sec-title">Dashboard</h1>
+              <div class="sec-sub" id="dash-sub">Loading…</div>
+            </div>
+            <div class="sec-actions">
+              <a class="btn" href="/editor.html">+ Draft</a>
+              <button type="button" class="btn primary" id="btn-publish-2">Publish</button>
+            </div>
+          </div>
 
-                        <h4>DOCKER CONTAINERS</h4>
-                        <div class="docker-list" id="docker-list-el">
-                            Loading container status...
-                        </div>
-                        
-                        <h4 style="margin-top: 20px;">BACKUP STATUS</h4>
-                        <div style="font-size: 0.9em; opacity: 0.8;" id="backup-status-el">
-                            Loading...
-                        </div>
-                    </div>
+          <!-- Posts table -->
+          <div class="panel" id="posts-panel">
+            <div class="panel-head">
+              <span class="panel-title"><span class="ind">▾</span>Posts</span>
+              <div class="panel-head-r">
+                <span id="posts-total">—</span>
+              </div>
+            </div>
+
+            <div class="tabs" role="tablist" aria-label="Filter posts by status">
+              <button type="button" class="tab" role="tab" data-tab="all" aria-selected="true">
+                All <span class="count" id="tab-count-all">—</span>
+              </button>
+              <button type="button" class="tab" role="tab" data-tab="draft" aria-selected="false">
+                Draft <span class="count" id="tab-count-draft">—</span>
+              </button>
+              <button
+                type="button"
+                class="tab"
+                role="tab"
+                data-tab="scheduled"
+                aria-selected="false"
+              >
+                Scheduled <span class="count" id="tab-count-scheduled">—</span>
+              </button>
+              <button
+                type="button"
+                class="tab"
+                role="tab"
+                data-tab="published"
+                aria-selected="false"
+              >
+                Published <span class="count" id="tab-count-published">—</span>
+              </button>
+            </div>
+
+            <div class="posts-toolbar">
+              <label class="search">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  aria-hidden="true"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+                <span class="sr-only">Filter posts</span>
+                <input
+                  type="search"
+                  id="posts-search"
+                  placeholder="Filter by title, slug, or tag…"
+                  autocomplete="off"
+                />
+              </label>
+              <span class="count" id="posts-visible">—</span>
+            </div>
+
+            <div class="row-grid head" role="row">
+              <span class="r-link" aria-hidden="true">
+                <span class="r-num">№</span>
+                <span class="r-title-wrap">Title</span>
+                <span class="r-status" style="text-align: right">Tags</span>
+                <span class="r-date">Date</span>
+              </span>
+              <span class="r-actions" aria-hidden="true"></span>
+            </div>
+            <div id="posts-rows">
+              <div class="posts-empty" id="posts-loading">Loading posts…</div>
+            </div>
+            <div class="posts-foot">
+              <span id="posts-foot-text">—</span>
+              <a href="/editor.html">+ New post →</a>
+            </div>
+          </div>
+
+          <!-- System health + security side panels -->
+          <div class="dash-grid" style="margin-top: 24px">
+            <div class="panel health-panel" id="health-panel" aria-label="Pi system health">
+              <div class="panel-head">
+                <span class="panel-title"><span class="ind">▾</span>Pi Health</span>
+                <div class="panel-head-r">
+                  <span>UP <b id="health-uptime" style="color: var(--fg)">—</b></span>
+                  <button type="button" class="btn-mini" id="btn-refresh-health">Refresh</button>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div class="metric" id="metric-cpu">
+                  <span class="metric-label">CPU</span>
+                  <span class="metric-val" id="metric-cpu-val">—</span>
+                  <span class="metric-bar"><i id="metric-cpu-bar" style="width: 0%"></i></span>
+                </div>
+                <div class="metric" id="metric-ram">
+                  <span class="metric-label">RAM</span>
+                  <span class="metric-val" id="metric-ram-val">—</span>
+                  <span class="metric-bar"><i id="metric-ram-bar" style="width: 0%"></i></span>
+                </div>
+                <div class="metric" id="metric-temp">
+                  <span class="metric-label">TEMP</span>
+                  <span class="metric-val" id="metric-temp-val">—</span>
+                  <span class="metric-bar"><i id="metric-temp-bar" style="width: 0%"></i></span>
+                </div>
+                <div class="metric" id="metric-disk">
+                  <span class="metric-label">DISK</span>
+                  <span class="metric-val" id="metric-disk-val">—</span>
+                  <span class="metric-bar"><i id="metric-disk-bar" style="width: 0%"></i></span>
                 </div>
 
-                <!-- Settings -->
-                <div class="panel" id="security-panel">
-                    <div class="panel-header">
-                        <span>[ SECURITY ]</span>
-                    </div>
-                    <div class="panel-content">
-                        <p>Register a passkey to login instantly with Face ID / Touch ID.</p>
-                        <button id="btn-register-passkey" class="primary">Register Passkey on this Device</button>
-                    </div>
+                <h4 class="health-section-label">Docker containers</h4>
+                <div id="docker-list">
+                  <div class="docker">
+                    <span class="ddot" aria-hidden="true"></span><span class="name">…</span
+                    ><span class="status">loading</span>
+                  </div>
                 </div>
+
+                <h4 class="health-section-label">Backup</h4>
+                <div
+                  id="backup-status"
+                  style="font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim)"
+                >
+                  —
+                </div>
+              </div>
             </div>
 
+            <div class="panel" id="security-panel" aria-label="Security">
+              <div class="panel-head">
+                <span class="panel-title"><span class="ind">▾</span>Security</span>
+                <span id="passkey-status" class="panel-head-r" aria-live="polite"></span>
+              </div>
+              <div class="panel-body">
+                <p style="margin: 0 0 12px; color: var(--fg-dim)">
+                  Register a passkey on this device to sign in with Face ID or Touch ID next time.
+                </p>
+                <button type="button" class="btn primary" id="btn-register-passkey">
+                  Register passkey
+                </button>
+                <p style="margin: 14px 0 0; color: var(--fg-mute); font-size: 11px">
+                  Phase 2 ships with passkey + password. Comments link uses a separate session
+                  (Remark42).
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
+      </main>
     </div>
 
-    <div id="terminal-modal" class="modal" style="display: none;">
-        <div class="modal-content panel">
-            <div class="panel-header">
-                <span>[ TERMINAL SESSION ]</span>
-                <button id="btn-close-terminal" style="padding: 2px 5px">X</button>
-            </div>
-            <div class="panel-content">
-                <div class="terminal-output" id="terminal-output" style="background: #000; color: #0f0; padding: 10px; height: 300px; overflow-y: scroll; font-family: monospace; border: 2px solid var(--ink-color); margin-bottom: 10px; white-space: pre-wrap;">Welcome to Terminal Eighty Pi Shell.
-Note: Commands execute directly on the Pi host container.
-</div>
-                <form id="terminal-form" style="display: flex; gap: 10px;">
-                    <span style="align-self: center; font-weight: bold;">>&nbsp;</span>
-                    <input type="text" id="terminal-input" placeholder="Enter command (e.g. uptime)" style="flex-grow: 1; background: var(--bg-color); color: var(--ink-color);" autocomplete="off">
-                    <button type="submit" class="btn primary">Run</button>
-                </form>
-            </div>
+    <!-- Terminal modal -->
+    <div
+      class="modal"
+      id="terminal-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      aria-labelledby="terminal-modal-title"
+    >
+      <div class="modal-card" style="max-width: 820px">
+        <div class="modal-head">
+          <h3 id="terminal-modal-title">[ Terminal Session ]</h3>
+          <button
+            type="button"
+            class="btn ghost"
+            id="btn-close-terminal"
+            aria-label="Close terminal"
+          >
+            ✕
+          </button>
         </div>
+        <div class="modal-body">
+          <pre class="terminal-output" id="terminal-output" aria-live="polite">
+Welcome to the Terminal Eighty Pi shell.
+Allowed commands run with timeout=15s. Type a command and press Enter.
+</pre
+          >
+          <form class="terminal-form" id="terminal-form" autocomplete="off">
+            <span class="terminal-prompt" aria-hidden="true">&gt;</span>
+            <label for="terminal-input" class="sr-only">Command</label>
+            <input type="text" id="terminal-input" placeholder="e.g. uptime" autocomplete="off" />
+            <button type="submit" class="btn primary">Run</button>
+          </form>
+        </div>
+      </div>
     </div>
 
-    <div id="toast" class="toast">Action completed.</div>
+    <!-- Delete-post confirm modal -->
+    <div
+      class="modal"
+      id="delete-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      aria-labelledby="delete-modal-title"
+    >
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3 id="delete-modal-title">[ Delete Post ]</h3>
+          <button
+            type="button"
+            class="btn ghost"
+            data-modal-close="delete-modal"
+            aria-label="Cancel"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <p>
+            Are you sure you want to delete <b id="delete-target-title">this post</b>? This action
+            is permanent.
+          </p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" data-modal-close="delete-modal">Cancel</button>
+          <button type="button" class="btn danger" id="btn-confirm-delete">Delete</button>
+        </div>
+      </div>
+    </div>
 
-    <script src="/js/theme.js"></script>
-    <script src="/js/app.js"></script>
+    <div id="toast-root" role="status" aria-live="polite" aria-atomic="false"></div>
+
+    <script src="/js/common.js"></script>
     <script src="/js/auth.js"></script>
-</body>
+    <script src="/js/terminal.js"></script>
+    <script src="/js/dashboard.js"></script>
+  </body>
 </html>

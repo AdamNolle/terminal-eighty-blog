@@ -1,594 +1,338 @@
-import { Editor } from '@tiptap/core';
-import StarterKit from '@tiptap/starter-kit';
-import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
-import Placeholder from '@tiptap/extension-placeholder';
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
-import { common, createLowlight } from 'lowlight';
-import MarkdownIt from 'markdown-it';
-import TurndownService from 'turndown';
-import { gfm } from 'turndown-plugin-gfm';
+// @ts-check
+/**
+ * editor.js — minimal editor wiring for Phase 2.
+ *
+ * Phase 2 deliberately ships a plain <textarea id="editor-fallback">
+ * inside <div id="editor-root">. Phase 3 will replace this with a
+ * TipTap + CodeMirror bundle mounted onto #editor-root and remove
+ * the textarea. Look for the "// Phase 3:" comment below.
+ *
+ * Backend (unchanged):
+ *   GET    /api/posts             → list
+ *   GET    /api/posts/:filename   → { data, content }
+ *   POST   /api/posts             → create
+ *   PUT    /api/posts/:filename   → update
+ *   DELETE /api/posts/:filename
+ *   POST   /api/publish
+ *   GET/POST/DELETE /api/media…   (via window.TE.media)
+ */
+(function () {
+  if (!/\/editor(\.html)?$/.test(window.location.pathname)) return;
 
-// ── Setup Parsers ──
-const mdParser = new MarkdownIt({ html: true, linkify: true, breaks: true });
-const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-turndown.use(gfm);
+  // ── DOM refs ──────────────────────────────────────────────
+  const $ = (id) => document.getElementById(id);
+  const titleEl = $('post-title');
+  const slugEl = $('post-slug');
+  const dateEl = $('post-date');
+  const draftEl = $('post-draft');
+  const tagsEl = $('post-tags');
+  const descEl = $('post-desc');
+  const bodyEl = $('editor-fallback'); // Phase 3 replaces this
+  const btnSave = $('btn-save');
+  const btnSave2 = $('btn-save-2');
+  const btnPub = $('btn-publish');
+  const btnPub2 = $('btn-publish-2');
+  const btnDel = $('btn-delete');
+  const savedTxt = $('ed-saved-text');
+  const statusPill = $('ed-status-pill');
+  const wordsTop = $('editor-words');
+  const wordsFoot = $('foot-words');
+  const wordsSide = $('editor-side-words');
+  const readTop = $('editor-read');
+  const readFoot = $('foot-read');
+  const readSide = $('editor-side-read');
+  const sideStatus = $('editor-side-status');
+  const crumbEditor = $('crumb-editor');
+  const spTitle = $('sp-title');
+  const spDesc = $('sp-desc');
+  const tagDataList = $('tag-suggestions');
+  const fileFoot = $('foot-file');
 
-const lowlight = createLowlight(common);
+  const urlParams = new URLSearchParams(window.location.search);
+  // Accept either `?file=` (legacy) or `?slug=` (Phase 2 plan)
+  let currentFile =
+    urlParams.get('file') || (urlParams.get('slug') ? `${urlParams.get('slug')}.md` : null);
 
-// ── State ──
-const urlParams = new URLSearchParams(window.location.search);
-const currentFile = urlParams.get('file');
-let editor;
-let isMarkdownMode = false;
-let isDirty = false;
-let saveTimeout;
+  let isDirty = false;
+  let autosaveTimer = null;
 
-// ── Elements ──
-const titleInput = document.getElementById('post-title');
-const slugInput = document.getElementById('post-slug');
-const draftSelect = document.getElementById('post-draft');
-const dateInput = document.getElementById('post-date');
-const tagsInput = document.getElementById('post-tags');
-const descInput = document.getElementById('post-desc');
-const btnSave = document.getElementById('btn-save');
-const btnPublish = document.getElementById('btn-publish');
-const btnDelete = document.getElementById('btn-delete');
-const saveStatus = document.getElementById('save-status');
+  // Warn the user before navigating away with unsaved edits.
+  window.addEventListener('beforeunload', (e) => {
+    if (!isDirty) return;
+    e.preventDefault();
+    // Modern browsers ignore the message, but Chrome still needs this set.
+    e.returnValue = '';
+  });
 
-const editorMetrics = document.getElementById('editor-metrics');
-const spTitle = document.getElementById('sp-title');
-const spDesc = document.getElementById('sp-desc');
-const tagSuggestions = document.getElementById('tag-suggestions');
-
-// ── Toast Utility ──
-function showToast(msg) {
-    const toast = document.getElementById('toast');
-    toast.textContent = msg;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 3000);
-}
-
-function updateStatus(msg) {
-    saveStatus.textContent = msg;
-}
-
-function updateMetrics() {
-    let text = '';
-    if (isMarkdownMode) {
-        text = document.getElementById('markdown-source').value;
-    } else if (editor) {
-        text = editor.getText();
-    }
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-    const mins = Math.ceil(words / 200);
-    if (editorMetrics) editorMetrics.textContent = `${words} words | ${mins} min`;
-}
-
-function updateSocialPreview() {
-    if (spTitle) spTitle.textContent = titleInput.value || 'Post Title';
-    if (spDesc) spDesc.textContent = descInput.value || 'Description will appear here...';
-}
-
-async function loadTags() {
-    try {
-        const res = await fetch('/api/posts');
-        const posts = await res.json();
-        const allTags = new Set();
-        posts.forEach(p => {
-            if (p.tags) p.tags.forEach(t => allTags.add(t));
-        });
-        if (tagSuggestions) {
-            tagSuggestions.innerHTML = '';
-            allTags.forEach(tag => {
-                const opt = document.createElement('option');
-                opt.value = tag;
-                tagSuggestions.appendChild(opt);
-            });
-        }
-    } catch(err) { console.error('Failed to load tags'); }
-}
-
-// ── Harper WASM Integration (Grammar Checker) ──
-// Harper is a Rust-based grammar checker that runs entirely in WASM
-async function initHarper() {
-    try {
-        // Import Harper WASM bindings dynamically
-        const { HarperWebSetup, Linter } = await import('https://esm.sh/harper.js@0.14.0');
-        
-        // Setup WASM
-        await HarperWebSetup();
-        const linter = new Linter();
-        
-        // Create TipTap Extension for Harper
-        const { Extension, Plugin, PluginKey, Decoration, DecorationSet } = await import('@tiptap/core');
-        
-        const HarperExtension = Extension.create({
-            name: 'harper',
-            addProseMirrorPlugins() {
-                const pluginKey = new PluginKey('harper');
-                return [
-                    new Plugin({
-                        key: pluginKey,
-                        state: {
-                            init() { return DecorationSet.empty; },
-                            apply(tr, oldSet) {
-                                // Only run linter when document changes and not in markdown mode
-                                if (!tr.docChanged || isMarkdownMode) return oldSet;
-                                
-                                const text = tr.doc.textContent;
-                                if (!text || text.length < 5) return DecorationSet.empty;
-                                
-                                try {
-                                    // Run Harper grammar check
-                                    const lints = linter.lint(text);
-                                    
-                                    const decos = lints.map(lint => {
-                                        // Map text offsets back to node positions
-                                        // This is a simplified mapping, might need adjustment for complex nodes
-                                        const from = Math.max(1, Math.min(tr.doc.nodeSize - 2, lint.span.start + 1));
-                                        const to = Math.max(from + 1, Math.min(tr.doc.nodeSize - 2, lint.span.end + 1));
-                                        
-                                        return Decoration.inline(from, to, {
-                                            class: 'harper-suggestion',
-                                            title: lint.message
-                                        });
-                                    });
-                                    
-                                    return DecorationSet.create(tr.doc, decos);
-                                } catch (e) {
-                                    console.error('Harper linting error:', e);
-                                    return oldSet;
-                                }
-                            }
-                        },
-                        props: {
-                            decorations(state) {
-                                return this.getState(state);
-                            }
-                        }
-                    })
-                ];
-            }
-        });
-        
-        console.log("Harper Grammar Checker loaded successfully.");
-        return HarperExtension;
-        
-    } catch (e) {
-        console.warn("Harper failed to load. Running without grammar check.", e);
-        return null;
-    }
-}
-
-// ── Initialize Editor ──
-async function initEditor() {
-    const extensions = [
-        StarterKit,
-        Image,
-        Link.configure({ openOnClick: false }),
-        Placeholder.configure({ placeholder: 'Write your post here...' }),
-        CodeBlockLowlight.configure({ lowlight })
-    ];
-    
-    // Add Harper if available
-    const harperExt = await initHarper();
-    if (harperExt) extensions.push(harperExt);
-
-    editor = new Editor({
-        element: document.getElementById('editor-element'),
-        extensions,
-        content: '',
-        onUpdate: () => {
-            isDirty = true;
-            updateStatus('Unsaved changes');
-            scheduleAutosave();
-            updateMetrics();
-        },
-        onSelectionUpdate: updateToolbar
-    });
-
-    setupToolbar();
-    setupMarkdownToggle();
-    setupImageUpload();
-    
-    // Load existing post if file param exists
-    if (currentFile) {
-        await loadPost(currentFile);
-        btnDelete.style.display = 'block';
+  // ── Helpers ──────────────────────────────────────────────
+  function setSaved(text) {
+    if (savedTxt) savedTxt.textContent = text || '';
+  }
+  function updateStatusPill() {
+    if (!statusPill) return;
+    const isDraft = draftEl?.value === 'true';
+    statusPill.textContent = isDraft ? 'DRAFT' : 'PUBLISHED';
+    statusPill.classList.toggle('pub', !isDraft);
+    if (sideStatus) sideStatus.textContent = isDraft ? 'Draft' : 'Published';
+  }
+  function updateMetrics() {
+    const text = (bodyEl?.value || '').trim();
+    const words = text ? text.split(/\s+/).length : 0;
+    const mins = Math.max(0, Math.ceil(words / 200));
+    const wText = `${words.toLocaleString()} word${words === 1 ? '' : 's'}`;
+    const rText = `${mins} min`;
+    if (wordsTop) wordsTop.textContent = wText;
+    if (wordsFoot) wordsFoot.textContent = words.toLocaleString();
+    if (wordsSide) wordsSide.textContent = words.toLocaleString();
+    if (readTop) readTop.textContent = rText;
+    if (readFoot) readFoot.textContent = mins.toString();
+    if (readSide) readSide.textContent = rText;
+  }
+  function updateSocialPreview() {
+    if (spTitle) spTitle.textContent = (titleEl?.value || '').trim() || 'Post title';
+    if (spDesc) spDesc.textContent = (descEl?.value || '').trim() || 'Description appears here…';
+  }
+  function slugify(s) {
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+  }
+  function markDirty() {
+    isDirty = true;
+    setSaved('Unsaved changes');
+    scheduleAutosave();
+  }
+  function setCurrentFile(filename) {
+    currentFile = filename;
+    if (filename) {
+      const u = new URL(window.location);
+      u.searchParams.set('file', filename);
+      window.history.replaceState({}, '', u);
+      if (btnDel) btnDel.style.display = '';
+      if (fileFoot) fileFoot.textContent = filename;
     } else {
-        // Set default date for new post
-        const now = new Date();
-        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        dateInput.value = now.toISOString().slice(0, 16);
-        updateMetrics();
-        updateSocialPreview();
+      if (btnDel) btnDel.style.display = 'none';
+      if (fileFoot) fileFoot.textContent = '';
     }
-    
-    loadTags();
-}
+    if (crumbEditor) crumbEditor.textContent = filename || 'New post';
+  }
 
-// ── Load / Save Logic ──
-async function loadPost(filename) {
+  // ── Load tags into <datalist> for autocomplete ────────────
+  async function loadTagSuggestions() {
+    if (!tagDataList) return;
     try {
-        const res = await fetch(`/api/posts/${filename}`);
-        if (!res.ok) throw new Error('Post not found');
-        const { data, content } = await res.json();
+      const posts = await TE.fetchJSON('/api/posts');
+      const set = new Set();
+      (posts || []).forEach((p) => (p.tags || []).forEach((t) => set.add(t)));
+      tagDataList.innerHTML = Array.from(set)
+        .sort()
+        .map((t) => `<option value="${TE.escape(t)}">`)
+        .join('');
+    } catch (_) {
+      /* non-fatal */
+    }
+  }
 
-        // Populate Frontmatter
-        titleInput.value = data.title || '';
-        slugInput.value = data.slug || filename.replace('.md', '');
-        draftSelect.value = data.draft ? 'true' : 'false';
-        descInput.value = data.description || '';
-        tagsInput.value = (data.tags || []).join(', ');
-        
-        if (data.date) {
-            const d = new Date(data.date);
-            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-            dateInput.value = d.toISOString().slice(0, 16);
-        }
-
-        // Parse markdown to HTML for TipTap
-        const html = mdParser.render(content || '');
-        editor.commands.setContent(html);
-        document.getElementById('markdown-source').value = content || '';
-        
-        isDirty = false;
-        updateStatus('');
-        updateMetrics();
-        updateSocialPreview();
+  // ── Load existing post ────────────────────────────────────
+  async function loadPost(filename) {
+    try {
+      const { data, content } = await TE.fetchJSON(`/api/posts/${encodeURIComponent(filename)}`);
+      titleEl.value = data.title || '';
+      slugEl.value = data.slug || filename.replace(/\.md$/, '');
+      draftEl.value = data.draft ? 'true' : 'false';
+      descEl.value = data.description || '';
+      tagsEl.value = (data.tags || []).join(', ');
+      if (data.date) {
+        const d = new Date(data.date);
+        // Adjust for local TZ so the datetime-local input shows the
+        // same wall-clock time the user expects.
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        dateEl.value = d.toISOString().slice(0, 16);
+      }
+      bodyEl.value = content || '';
+      setCurrentFile(filename);
+      isDirty = false;
+      setSaved('Saved');
+      updateMetrics();
+      updateSocialPreview();
+      updateStatusPill();
     } catch (err) {
-        showToast('Error loading post');
+      TE.toast(err.message || 'Failed to load post.', 'error');
     }
-}
+  }
 
-async function savePost() {
-    if (!titleInput.value) {
-        alert('Title is required');
-        return false;
+  // ── Save ──────────────────────────────────────────────────
+  async function savePost() {
+    if (!titleEl.value.trim()) {
+      TE.toast('Title is required.', 'error');
+      return false;
     }
-
     const data = {
-        title: titleInput.value,
-        slug: slugInput.value,
-        draft: draftSelect.value === 'true',
-        date: new Date(dateInput.value).toISOString(),
-        description: descInput.value,
-        tags: tagsInput.value.split(',').map(t => t.trim()).filter(Boolean)
+      title: titleEl.value.trim(),
+      slug: slugEl.value.trim() || slugify(titleEl.value),
+      draft: draftEl.value === 'true',
+      date: dateEl.value ? new Date(dateEl.value).toISOString() : new Date().toISOString(),
+      description: descEl.value.trim(),
+      tags: tagsEl.value
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
     };
+    const content = bodyEl.value || '';
+    const url = currentFile ? `/api/posts/${encodeURIComponent(currentFile)}` : '/api/posts';
+    const method = currentFile ? 'PUT' : 'POST';
 
-    let content = '';
-    if (isMarkdownMode) {
-        content = document.getElementById('markdown-source').value;
-    } else {
-        // Convert TipTap HTML back to Markdown
-        const html = editor.getHTML();
-        content = turndown.turndown(html);
-    }
-
+    setSaved('Saving…');
     try {
-        updateStatus('Saving...');
-        const url = currentFile ? `/api/posts/${currentFile}` : '/api/posts';
-        const method = currentFile ? 'PUT' : 'POST';
-        
-        const res = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data, content })
-        });
-        
-        const result = await res.json();
-        if (res.ok) {
-            isDirty = false;
-            updateStatus('Saved');
-            if (!currentFile || currentFile !== result.filename) {
-                // Update URL if new or slug changed without reloading
-                const newUrl = new URL(window.location);
-                newUrl.searchParams.set('file', result.filename);
-                window.history.replaceState({}, '', newUrl);
-                btnDelete.style.display = 'block';
-            }
-            return true;
-        } else {
-            throw new Error(result.error);
-        }
+      const result = await TE.fetchJSON(url, {
+        method,
+        body: JSON.stringify({ data, content }),
+      });
+      isDirty = false;
+      setSaved('Saved');
+      if (result.filename && result.filename !== currentFile) {
+        setCurrentFile(result.filename);
+      } else if (!currentFile && result.filename) {
+        setCurrentFile(result.filename);
+      }
+      updateStatusPill();
+      return true;
     } catch (err) {
-        updateStatus('Save failed');
-        alert('Save failed: ' + err.message);
-        return false;
+      setSaved('Save failed');
+      TE.toast(err.message || 'Save failed.', 'error');
+      return false;
     }
-}
+  }
 
-// ── Toolbar & Modes ──
-function setupToolbar() {
-    document.querySelectorAll('#toolbar button[data-cmd]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (isMarkdownMode) return;
-            const cmd = btn.dataset.cmd;
-            
-            // Map toolbar commands to TipTap chain methods
-            switch(cmd) {
-                case 'bold': editor.chain().focus().toggleBold().run(); break;
-                case 'italic': editor.chain().focus().toggleItalic().run(); break;
-                case 'strike': editor.chain().focus().toggleStrike().run(); break;
-                case 'h1': editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
-                case 'h2': editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
-                case 'h3': editor.chain().focus().toggleHeading({ level: 3 }).run(); break;
-                case 'bulletList': editor.chain().focus().toggleBulletList().run(); break;
-                case 'orderedList': editor.chain().focus().toggleOrderedList().run(); break;
-                case 'blockquote': editor.chain().focus().toggleBlockquote().run(); break;
-                case 'codeBlock': editor.chain().focus().toggleCodeBlock().run(); break;
-            }
-        });
-    });
+  function scheduleAutosave() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      // Only autosave existing posts; never accidentally create new posts
+      // from a half-typed draft.
+      if (currentFile && titleEl.value.trim()) savePost();
+    }, 10000);
+  }
 
-    document.getElementById('btn-link').addEventListener('click', () => {
-        if (isMarkdownMode) return;
-        const url = window.prompt('URL');
-        if (url) editor.chain().focus().setLink({ href: url }).run();
-        else editor.chain().focus().unsetLink().run();
-    });
-}
-
-function updateToolbar() {
-    if (isMarkdownMode) return;
-    document.querySelectorAll('#toolbar button[data-cmd]').forEach(btn => {
-        const cmd = btn.dataset.cmd;
-        let active = false;
-        switch(cmd) {
-            case 'h1': active = editor.isActive('heading', { level: 1 }); break;
-            case 'h2': active = editor.isActive('heading', { level: 2 }); break;
-            case 'h3': active = editor.isActive('heading', { level: 3 }); break;
-            default: active = editor.isActive(cmd); break;
-        }
-        if (active) btn.classList.add('is-active');
-        else btn.classList.remove('is-active');
-    });
-}
-
-function setupMarkdownToggle() {
-    const btnToggle = document.getElementById('btn-toggle-md');
-    const editorEl = document.getElementById('editor-element');
-    const mdEl = document.getElementById('markdown-source');
-    
-    btnToggle.addEventListener('click', () => {
-        isMarkdownMode = !isMarkdownMode;
-        
-        if (isMarkdownMode) {
-            // WYSIWYG -> Markdown
-            const html = editor.getHTML();
-            mdEl.value = turndown.turndown(html);
-            editorEl.style.display = 'none';
-            mdEl.style.display = 'block';
-            btnToggle.classList.add('is-active');
-            btnToggle.textContent = 'WYSIWYG Source';
-            // Disable toolbar buttons
-            document.querySelectorAll('#toolbar button[data-cmd], #btn-link, #btn-image').forEach(b => b.disabled = true);
-        } else {
-            // Markdown -> WYSIWYG
-            const html = mdParser.render(mdEl.value);
-            editor.commands.setContent(html);
-            mdEl.style.display = 'none';
-            editorEl.style.display = 'flex';
-            btnToggle.classList.remove('is-active');
-            btnToggle.textContent = 'Markdown Source';
-            // Enable toolbar
-            document.querySelectorAll('#toolbar button[data-cmd], #btn-link, #btn-image').forEach(b => b.disabled = false);
-        }
-    });
-
-    mdEl.addEventListener('input', () => {
-        isDirty = true;
-        updateStatus('Unsaved changes');
-        scheduleAutosave();
-        updateMetrics();
-    });
-}
-
-// ── Image Uploads ──
-function setupImageUpload() {
-    const btnImage = document.getElementById('btn-image');
-    const fileInput = document.getElementById('image-upload-input');
-    const imageModal = document.getElementById('image-modal');
-    const btnCloseImageModal = document.getElementById('btn-close-image-modal');
-    const btnUploadNew = document.getElementById('btn-upload-new');
-    const gallery = document.getElementById('image-gallery');
-
-    // Open Modal
-    btnImage.addEventListener('click', async () => {
-        if (isMarkdownMode) return;
-        imageModal.style.display = 'flex';
-        await loadGallery();
-    });
-
-    // Close Modal
-    btnCloseImageModal.addEventListener('click', () => {
-        imageModal.style.display = 'none';
-    });
-
-    // Upload New from Modal
-    btnUploadNew.addEventListener('click', () => fileInput.click());
-
-    fileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            imageModal.style.display = 'none';
-            await uploadImage(file);
-        }
-        fileInput.value = '';
-    });
-
-    async function loadGallery() {
-        gallery.innerHTML = 'Loading images...';
-        try {
-            const res = await fetch('/api/media');
-            const files = await res.json();
-            gallery.innerHTML = '';
-            if (files.length === 0) {
-                gallery.innerHTML = 'No images found.';
-                return;
-            }
-            files.forEach(f => {
-                const imgWrap = document.createElement('div');
-                imgWrap.style.position = 'relative';
-                imgWrap.style.height = '150px';
-
-                const imgInner = document.createElement('div');
-                imgInner.style.cursor = 'pointer';
-                imgInner.style.border = '2px solid var(--ink-color)';
-                imgInner.style.height = '100%';
-                imgInner.style.background = `url(${f.url}) center/cover no-repeat var(--bg-color)`;
-                imgInner.title = f.filename;
-                
-                imgInner.addEventListener('click', () => {
-                    editor.chain().focus().setImage({ src: f.url }).run();
-                    imageModal.style.display = 'none';
-                });
-
-                const delBtn = document.createElement('button');
-                delBtn.textContent = 'X';
-                delBtn.style.position = 'absolute';
-                delBtn.style.top = '5px';
-                delBtn.style.right = '5px';
-                delBtn.style.background = 'var(--terminal-red, #ff4444)';
-                delBtn.style.color = '#fff';
-                delBtn.style.border = 'none';
-                delBtn.style.cursor = 'pointer';
-                delBtn.style.padding = '2px 6px';
-                delBtn.style.fontWeight = 'bold';
-                delBtn.style.borderRadius = '3px';
-                
-                delBtn.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    if (!confirm('Delete this image permanently?')) return;
-                    try {
-                        const r = await fetch(`/api/media/${f.filename}`, { method: 'DELETE' });
-                        if (r.ok) loadGallery();
-                        else alert('Failed to delete image');
-                    } catch (err) { alert('Error deleting image'); }
-                });
-                
-                imgWrap.appendChild(imgInner);
-                imgWrap.appendChild(delBtn);
-                gallery.appendChild(imgWrap);
-            });
-        } catch (err) {
-            gallery.innerHTML = 'Failed to load images.';
-        }
-    }
-
-    // Drag and Drop
-    const container = document.querySelector('.tiptap-container');
-    container.addEventListener('dragover', e => { e.preventDefault(); container.style.borderColor = 'var(--terminal-green)'; });
-    container.addEventListener('dragleave', e => { e.preventDefault(); container.style.borderColor = 'var(--ink-color)'; });
-    container.addEventListener('drop', async e => {
-        e.preventDefault();
-        container.style.borderColor = 'var(--ink-color)';
-        if (isMarkdownMode) return;
-        
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) {
-            await uploadImage(file);
-        }
-    });
-
-    // Paste Image
-    document.addEventListener('paste', async e => {
-        if (isMarkdownMode) return;
-        const file = Array.from(e.clipboardData.items)
-            .find(i => i.type.startsWith('image/'))?.getAsFile();
-        if (file) await uploadImage(file);
-    });
-}
-
-async function uploadImage(file) {
-    const formData = new FormData();
-    formData.append('file', file);
-
+  async function publishSite() {
+    if (!(await savePost())) return;
+    btnPub.disabled = btnPub2.disabled = true;
     try {
-        updateStatus('Uploading...');
-        const res = await fetch('/api/media/upload', { method: 'POST', body: formData });
-        const data = await res.json();
-        
-        if (data.success) {
-            editor.chain().focus().setImage({ src: data.url }).run();
-            updateStatus('Uploaded');
-        } else {
-            throw new Error(data.error);
-        }
+      await TE.fetchJSON('/api/publish', { method: 'POST', body: '{}' });
+      TE.toast('Publish triggered.');
     } catch (err) {
-        alert('Upload failed: ' + err.message);
-        updateStatus('');
+      TE.toast(err.message || 'Publish failed.', 'error');
+    } finally {
+      btnPub.disabled = btnPub2.disabled = false;
     }
-}
+  }
 
-// ── Autosave ──
-function scheduleAutosave() {
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(async () => {
-        // Only autosave if title exists and file was previously saved
-        if (titleInput.value && currentFile) {
-            await savePost();
-        }
-    }, 10000); // Autosave 10s after typing stops
-}
-
-// ── Form Change Listeners ──
-[titleInput, slugInput, draftSelect, dateInput, tagsInput, descInput].forEach(el => {
-    el.addEventListener('input', () => {
-        isDirty = true;
-        updateStatus('Unsaved changes');
-        scheduleAutosave();
-        if (el === titleInput || el === descInput) updateSocialPreview();
-    });
-});
-
-// ── Action Buttons ──
-btnSave.addEventListener('click', savePost);
-
-btnPublish.addEventListener('click', async () => {
-    const orig = btnPublish.textContent;
-    btnPublish.textContent = '[WORKING...]';
-    btnPublish.disabled = true;
-    
-    if (await savePost()) {
-        try {
-            const res = await fetch('/api/publish', { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                showToast('Site publishing triggered!');
-            } else {
-                throw new Error(data.error);
-            }
-        } catch (err) {
-            alert('Publish failed: ' + err.message);
-        }
-    }
-    
-    btnPublish.textContent = orig;
-    btnPublish.disabled = false;
-});
-
-btnDelete.addEventListener('click', async () => {
-    if (!currentFile || !confirm('Are you sure you want to delete this post?')) return;
-    
+  // ── Delete ────────────────────────────────────────────────
+  async function deletePost() {
+    if (!currentFile) return;
+    if (!confirm(`Delete "${titleEl.value || currentFile}" permanently?`)) return;
     try {
-        const res = await fetch(`/api/posts/${currentFile}`, { method: 'DELETE' });
-        if (res.ok) window.location.href = '/';
-        else throw new Error('Delete failed');
+      await TE.fetchJSON(`/api/posts/${encodeURIComponent(currentFile)}`, {
+        method: 'DELETE',
+        body: undefined,
+      });
+      TE.toast('Post deleted.');
+      window.location.href = '/index.html';
     } catch (err) {
-        alert(err.message);
+      TE.toast(err.message || 'Delete failed.', 'error');
     }
-});
+  }
 
-// Ctrl/Cmd+S shortcut
-document.addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+  // ── Wire DOM ──────────────────────────────────────────────
+  function boot() {
+    // Title → slug auto-fill (only when slug is empty or matches the
+    // previous auto-derived slug).
+    let lastAutoSlug = '';
+    titleEl.addEventListener('input', () => {
+      const auto = slugify(titleEl.value);
+      if (!slugEl.value || slugEl.value === lastAutoSlug) {
+        slugEl.value = auto;
+        lastAutoSlug = auto;
+      }
+      updateSocialPreview();
+      markDirty();
+    });
+
+    // Dirty-tracking + UI updates
+    [slugEl, dateEl, draftEl, tagsEl].forEach((el) => el.addEventListener('input', markDirty));
+    descEl.addEventListener('input', () => {
+      updateSocialPreview();
+      markDirty();
+    });
+    bodyEl.addEventListener('input', () => {
+      updateMetrics();
+      markDirty();
+    });
+    draftEl.addEventListener('change', updateStatusPill);
+
+    // Action buttons (both top + sidebar copies)
+    [btnSave, btnSave2].forEach((b) => b && b.addEventListener('click', savePost));
+    [btnPub, btnPub2].forEach((b) => b && b.addEventListener('click', publishSite));
+    if (btnDel) btnDel.addEventListener('click', deletePost);
+
+    // Keyboard: Cmd/Ctrl + S
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         savePost();
-    }
-});
+      }
+    });
 
-// Start
-initEditor();
+    // Media uploader inside the editor sidebar (Phase 4 will overhaul)
+    if (window.TE && TE.media) {
+      TE.media.bindUploader({
+        dropzone: 'ed-dropzone',
+        input: 'ed-file-input',
+        recent: 'ed-recent-media',
+        onInsert: ({ url }) => {
+          if (!url) return;
+          // Insert markdown image at cursor — fallback editor only.
+          const md = `\n![](${url})\n`;
+          const start = bodyEl.selectionStart || 0;
+          const end = bodyEl.selectionEnd || 0;
+          bodyEl.value = bodyEl.value.slice(0, start) + md + bodyEl.value.slice(end);
+          bodyEl.selectionStart = bodyEl.selectionEnd = start + md.length;
+          bodyEl.focus();
+          updateMetrics();
+          markDirty();
+        },
+      });
+    }
+
+    // Phase 3: TipTap mount here
+    // ----------------------------
+    // Replace the textarea inside #editor-root with a TipTap editor.
+    // Keep these contracts intact:
+    //   - bodyEl.value (string)   — replace w/ editor.getMarkdown()
+    //   - bodyEl.input event      — call markDirty() + updateMetrics()
+    //   - selectionStart/End      — needed for media insertion above
+    // The savePost() flow already consumes a string `content`, so the
+    // bundle just needs to expose a textarea-compatible facade.
+
+    // Initial state
+    if (currentFile) {
+      loadPost(currentFile);
+    } else {
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      dateEl.value = now.toISOString().slice(0, 16);
+      setCurrentFile(null);
+      updateMetrics();
+      updateSocialPreview();
+      updateStatusPill();
+      setSaved('');
+    }
+    loadTagSuggestions();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
