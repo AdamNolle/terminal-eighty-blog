@@ -900,3 +900,290 @@
 .te-link-foot .te-link-remove[hidden] {
   display: none;
 }
+
+/* ============================================================
+   Phase 3c: tables, math, callouts, footnotes, code-highlight
+   ============================================================ */
+
+/* ─── Tables ───────────────────────────────────────────────── */
+.ProseMirror table,
+.ProseMirror .te-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 18px;
+  font-family: var(--sans, var(--serif));
+  font-size: 14.5px;
+  table-layout: fixed;
+  overflow: hidden;
+  border-radius: 4px;
+}
+.ProseMirror table th,
+.ProseMirror table td {
+  border: 1px solid var(--glass-border);
+  padding: 8px 10px;
+  vertical-align: top;
+  text-align: left;
+  min-width: 60px;
+  position: relative;
+}
+.ProseMirror table th {
+  background: var(--glass-tint);
+  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg);
+}
+.ProseMirror table tr:nth-child(2n) td {
+  background: color-mix(in srgb, var(--glass-tint) 50%, transparent);
+}
+.ProseMirror table .selectedCell {
+  background: var(--accent-soft) !important;
+}
+/* The table toolbar group only renders when the cursor is in a table. */
+.te-tb-table-group.is-hidden,
+.te-tb-code-group.is-hidden {
+  display: none;
+}
+.te-tb-table-group.is-visible,
+.te-tb-code-group.is-visible {
+  display: inline-flex;
+}
+
+/* ─── Code blocks (lowlight syntax-highlight) ──────────────── */
+.ProseMirror pre.te-code-block,
+.ProseMirror pre code.hljs {
+  position: relative;
+}
+.ProseMirror pre.te-code-block::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  pointer-events: none;
+}
+/* Highlight.js token colours — neutral palette that works in both
+   themes. Phase 11 may tune these against a proper Chroma palette. */
+.ProseMirror pre .hljs-keyword,
+.ProseMirror pre .hljs-selector-tag,
+.ProseMirror pre .hljs-built_in,
+.ProseMirror pre .hljs-name,
+.ProseMirror pre .hljs-tag {
+  color: var(--accent);
+}
+.ProseMirror pre .hljs-string,
+.ProseMirror pre .hljs-title,
+.ProseMirror pre .hljs-section,
+.ProseMirror pre .hljs-attribute,
+.ProseMirror pre .hljs-literal,
+.ProseMirror pre .hljs-template-tag,
+.ProseMirror pre .hljs-template-variable,
+.ProseMirror pre .hljs-type,
+.ProseMirror pre .hljs-addition {
+  color: color-mix(in srgb, var(--accent) 70%, var(--fg));
+}
+.ProseMirror pre .hljs-comment,
+.ProseMirror pre .hljs-quote,
+.ProseMirror pre .hljs-deletion,
+.ProseMirror pre .hljs-meta {
+  color: var(--fg-mute);
+  font-style: italic;
+}
+.ProseMirror pre .hljs-number,
+.ProseMirror pre .hljs-regexp,
+.ProseMirror pre .hljs-symbol,
+.ProseMirror pre .hljs-variable,
+.ProseMirror pre .hljs-link {
+  color: var(--warn, color-mix(in srgb, var(--accent) 50%, #c80));
+}
+.ProseMirror pre .hljs-doctag,
+.ProseMirror pre .hljs-strong {
+  font-weight: 700;
+}
+.ProseMirror pre .hljs-emphasis {
+  font-style: italic;
+}
+/* Language select inside the toolbar. */
+.te-tb-lang-label {
+  display: inline-flex;
+  align-items: center;
+}
+.te-tb-lang {
+  appearance: none;
+  background: var(--glass-tint);
+  border: 1px solid var(--glass-border);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 24px 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.te-tb-lang:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ─── Math ─────────────────────────────────────────────────── */
+.ProseMirror .te-math {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 2px;
+  transition:
+    background-color 120ms,
+    color 120ms;
+}
+.ProseMirror .te-math-inline {
+  display: inline-block;
+  vertical-align: baseline;
+  font-family: var(--mono);
+}
+.ProseMirror .te-math-block {
+  display: block;
+  text-align: center;
+  margin: 14px 0;
+  padding: 12px;
+  font-family: var(--mono);
+}
+.ProseMirror .te-math:hover {
+  background: var(--accent-soft);
+}
+.ProseMirror .te-math.is-editing {
+  background: var(--glass-tint);
+  outline: 1px dashed var(--accent);
+  cursor: text;
+  padding: 4px 6px;
+}
+.ProseMirror .te-math-selected {
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent);
+}
+.te-math-input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 14px;
+  resize: vertical;
+  padding: 0;
+  min-height: 1em;
+}
+
+/* ─── Callouts (admonitions) ───────────────────────────────── */
+.ProseMirror aside.callout {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 12px 14px 4px 14px;
+  margin: 14px 0;
+  font-family: var(--sans, var(--serif));
+  font-size: 14.5px;
+  color: var(--fg);
+  position: relative;
+}
+.ProseMirror aside.callout .callout-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+.ProseMirror aside.callout .callout-label::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow, transparent);
+  display: inline-block;
+}
+.ProseMirror aside.callout.callout-tip {
+  border-left-color: var(--ok, var(--accent));
+  background: var(--ok-soft, var(--accent-soft));
+}
+.ProseMirror aside.callout.callout-tip .callout-label,
+.ProseMirror aside.callout.callout-tip .callout-label::before {
+  color: var(--ok, var(--accent));
+  background: var(--ok, var(--accent));
+}
+.ProseMirror aside.callout.callout-tip .callout-label {
+  background: transparent;
+}
+.ProseMirror aside.callout.callout-warn {
+  border-left-color: var(--warn, #c80);
+  background: var(--warn-soft, color-mix(in srgb, #c80 14%, transparent));
+}
+.ProseMirror aside.callout.callout-warn .callout-label {
+  color: var(--warn, #c80);
+}
+.ProseMirror aside.callout.callout-warn .callout-label::before {
+  background: var(--warn, #c80);
+}
+.ProseMirror aside.callout.callout-danger {
+  border-left-color: var(--danger, #c44);
+  background: var(--danger-soft, color-mix(in srgb, #c44 14%, transparent));
+}
+.ProseMirror aside.callout.callout-danger .callout-label {
+  color: var(--danger, #c44);
+}
+.ProseMirror aside.callout.callout-danger .callout-label::before {
+  background: var(--danger, #c44);
+}
+.ProseMirror aside.callout .callout-body > p:last-child {
+  margin-bottom: 8px;
+}
+
+/* ─── Footnotes ────────────────────────────────────────────── */
+.ProseMirror sup.footnote-ref {
+  font-family: var(--mono);
+  font-size: 0.72em;
+  line-height: 0;
+  position: relative;
+  top: -0.5em;
+  color: var(--accent);
+}
+.ProseMirror sup.footnote-ref a {
+  color: inherit;
+  text-decoration: none;
+}
+.ProseMirror sup.footnote-ref a::before {
+  content: "[";
+  letter-spacing: 0;
+}
+.ProseMirror ol.footnote-list {
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: 1px solid var(--glass-border);
+  font-family: var(--sans, var(--serif));
+  font-size: 13.5px;
+  color: var(--fg-dim);
+  counter-reset: footnote;
+  list-style: none;
+  padding-left: 22px;
+}
+.ProseMirror ol.footnote-list li[data-footnote-item] {
+  position: relative;
+  margin-bottom: 6px;
+}
+.ProseMirror ol.footnote-list li[data-footnote-item]::before {
+  content: "[" attr(data-label) "]";
+  font-family: var(--mono);
+  color: var(--accent);
+  font-size: 11px;
+  position: absolute;
+  left: -24px;
+  top: 1px;
+}

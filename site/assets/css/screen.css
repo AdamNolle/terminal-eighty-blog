@@ -1956,3 +1956,76 @@ main:focus:not(:focus-visible) {
     height: 20px;
   }
 }
+
+/* ============================================================
+   Phase 3c: callout admonitions on the public site
+   The admin TipTap editor authors `:::info / :::tip / :::warn /
+   :::danger` directives; the Hugo single-page template rewrites
+   them into `<aside class="callout callout-TYPE">` (see
+   site/layouts/_default/single.html). These rules style the
+   resulting markup in the public prose. Math + footnote styles
+   are inherited from goldmark's defaults.
+   ============================================================ */
+.prose aside.callout {
+  border-left: 3px solid var(--accent, currentColor);
+  background: var(--accent-soft, color-mix(in srgb, currentColor 12%, transparent));
+  border-radius: 4px;
+  padding: 12px 14px 4px;
+  margin: 18px 0;
+  font-size: 15px;
+}
+.prose aside.callout .callout-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent, currentColor);
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+.prose aside.callout .callout-label::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, currentColor);
+  display: inline-block;
+}
+.prose aside.callout .callout-body > p:last-child {
+  margin-bottom: 8px;
+}
+.prose aside.callout.callout-tip {
+  border-left-color: var(--ok, var(--accent));
+}
+.prose aside.callout.callout-tip .callout-label,
+.prose aside.callout.callout-tip .callout-label::before {
+  color: var(--ok, var(--accent));
+}
+.prose aside.callout.callout-tip .callout-label::before {
+  background: var(--ok, var(--accent));
+}
+.prose aside.callout.callout-warn {
+  border-left-color: var(--warn, #c80);
+  background: color-mix(in srgb, var(--warn, #c80) 12%, transparent);
+}
+.prose aside.callout.callout-warn .callout-label,
+.prose aside.callout.callout-warn .callout-label::before {
+  color: var(--warn, #c80);
+}
+.prose aside.callout.callout-warn .callout-label::before {
+  background: var(--warn, #c80);
+}
+.prose aside.callout.callout-danger {
+  border-left-color: var(--danger, #c44);
+  background: color-mix(in srgb, var(--danger, #c44) 12%, transparent);
+}
+.prose aside.callout.callout-danger .callout-label,
+.prose aside.callout.callout-danger .callout-label::before {
+  color: var(--danger, #c44);
+}
+.prose aside.callout.callout-danger .callout-label::before {
+  background: var(--danger, #c44);
+}

@@ -186,10 +186,32 @@ macOS / iPadOS and `Ctrl` everywhere else.
 | `/`           | Open slash menu (block picker) |
 
 The slash menu, opened by typing `/` inside the editor, offers headings
-H1–H3, bullet/ordered/task lists, blockquote, code block, divider, and
-placeholder rows for image, file, embed, and table (Phases 4 / 6 / 7 / 3c
-wire each one). Navigate with `ArrowUp` / `ArrowDown`, insert with
-`Enter`, dismiss with `Escape`.
+H1–H3, bullet/ordered/task lists, blockquote, code block, divider, table
+(real 3×3 insert), inline + block math, info / tip / warn / danger
+callouts, footnotes, and placeholder rows for image / file / embed
+(Phases 4 / 6 / 7 wire each one). Navigate with `ArrowUp` / `ArrowDown`,
+insert with `Enter`, dismiss with `Escape`.
+
+### Editor block types
+
+Beyond CommonMark, the Phase 3c editor authors five extended constructs.
+Each round-trips through the same Markdown source the public site reads,
+so what you type in the admin is what gets committed to the repo.
+
+| Block              | Markdown source                                         | Notes                                                                                    |
+| ------------------ | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Table              | `\| Col \| Col \|\n\| --- \| --- \|\n\| 1 \| 2 \|`      | GFM tables; first row is the header. Toolbar group shows in-context.                     |
+| Inline math        | `$x^2$`                                                 | Single-line LaTeX. Rendered by KaTeX (CDN, lazy-loaded SRI-pinned).                      |
+| Block math         | `$$\n\\sum_{i=0}^n i\n$$`                               | Display equation, centered.                                                              |
+| Callout (info)     | `:::info\n…\n:::`                                       | Also `:::tip`, `:::warn`, `:::danger`. Public site renders `<aside.callout>`.            |
+| Footnote           | `text[^id]\n\n[^id]: definition`                        | Auto-numbered; stable id round-trip.                                                     |
+| Code with language | <code>\`\`\`js</code><br>`code…`<br><code>\`\`\`</code> | Pick from 13 grammars: js, ts, py, go, rust, html, css, json, bash, md, yaml, sql, diff. |
+
+Click rendered math to open an inline edit textarea — blur (or `Cmd+Enter`)
+commits, `Escape` cancels. Tables expose a context-aware toolbar group
+(insert/delete row/col, delete table, toggle header) only when the cursor
+is inside a table cell. Code blocks expose a language picker `<select>`
+only when the cursor is inside a fenced block.
 
 ### History + actions
 
