@@ -95,6 +95,26 @@
             <button
               type="button"
               class="btn ghost"
+              id="btn-toc-toggle"
+              title="Toggle table of contents"
+              aria-pressed="true"
+              aria-label="Toggle table of contents"
+            >
+              <span aria-hidden="true">≡</span>
+            </button>
+            <button
+              type="button"
+              class="btn ghost"
+              id="btn-seo-toggle"
+              title="Toggle SEO preview"
+              aria-pressed="false"
+              aria-label="Toggle SEO preview"
+            >
+              <span aria-hidden="true">⌕</span>
+            </button>
+            <button
+              type="button"
+              class="btn ghost"
               id="btn-theme"
               title="Toggle theme"
               aria-pressed="false"
@@ -108,7 +128,7 @@
         </header>
 
         <div id="main" class="stage">
-          <div class="editor-layout">
+          <div class="editor-layout" data-toc-open="true" data-seo-open="false">
             <!-- ============ EDITOR PANE ============ -->
             <section class="editor-pane" aria-label="Post body">
               <div class="editor-head">
@@ -179,16 +199,111 @@
                 </div>
               </div>
 
-              <div class="editor-foot">
-                <span
-                  ><span id="foot-words">0</span> words ·
-                  <span id="foot-read">0 min</span> read</span
-                >
+              <div class="editor-foot" role="status" aria-label="Editor status">
+                <span class="editor-foot-stats">
+                  <span><span id="foot-words">0</span> words</span>
+                  <span class="editor-foot-sep" aria-hidden="true">·</span>
+                  <span><span id="foot-chars">0</span> chars</span>
+                  <span class="editor-foot-sep" aria-hidden="true">·</span>
+                  <span><span id="foot-read">0 min</span> read</span>
+                </span>
                 <div class="editor-foot-r">
+                  <span
+                    class="autosave-indicator"
+                    id="autosave-indicator"
+                    data-state="idle"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    <span class="autosave-pip" aria-hidden="true"></span>
+                    <span class="autosave-text" id="autosave-text">Ready</span>
+                  </span>
                   <span id="foot-file" style="color: var(--fg-mute)"></span>
                 </div>
               </div>
             </section>
+
+            <!-- ============ TOC + SEO AUX COLUMN ============ -->
+            <aside class="ed-aux" aria-label="Editor panels" id="ed-aux">
+              <section
+                class="ed-aux-panel ed-aux-toc"
+                id="ed-toc-panel"
+                aria-label="Table of contents"
+              >
+                <header class="ed-aux-head">
+                  <span>Table of contents</span>
+                  <button
+                    type="button"
+                    class="ed-aux-close"
+                    id="ed-toc-close"
+                    title="Hide table of contents"
+                    aria-label="Hide table of contents"
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </header>
+                <nav class="ed-toc-body" id="ed-toc-body" aria-label="Table of contents">
+                  <p class="ed-aux-empty" id="ed-toc-empty">
+                    Headings will appear here as you add them.
+                  </p>
+                </nav>
+              </section>
+
+              <section
+                class="ed-aux-panel ed-aux-seo"
+                id="ed-seo-panel"
+                aria-label="SEO preview"
+                hidden
+              >
+                <header class="ed-aux-head">
+                  <span>SEO preview</span>
+                  <button
+                    type="button"
+                    class="ed-aux-close"
+                    id="ed-seo-close"
+                    title="Hide SEO preview"
+                    aria-label="Hide SEO preview"
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </header>
+                <div class="ed-seo-body" aria-label="SEO preview">
+                  <div
+                    class="serp-card"
+                    id="serp-card"
+                    role="img"
+                    aria-label="Google search preview"
+                  >
+                    <div class="serp-url">
+                      <span id="serp-domain">terminaleighty.com</span>
+                      <span class="serp-url-sep" aria-hidden="true">›</span>
+                      <span id="serp-slug">post-slug</span>
+                    </div>
+                    <div class="serp-title" id="serp-title">Untitled post</div>
+                    <div class="serp-desc" id="serp-desc">Description appears here.</div>
+                  </div>
+                  <ul class="ed-seo-meta" aria-label="SEO checks">
+                    <li>
+                      <span class="ed-seo-label">Title</span>
+                      <span class="ed-seo-count"><span id="seo-title-len">0</span>/60</span>
+                      <span class="ed-seo-bar" aria-hidden="true">
+                        <span class="ed-seo-bar-fill" id="seo-title-bar"></span>
+                      </span>
+                    </li>
+                    <li>
+                      <span class="ed-seo-label">Description</span>
+                      <span class="ed-seo-count"><span id="seo-desc-len">0</span>/160</span>
+                      <span class="ed-seo-bar" aria-hidden="true">
+                        <span class="ed-seo-bar-fill" id="seo-desc-bar"></span>
+                      </span>
+                    </li>
+                  </ul>
+                  <p class="ed-seo-hint" id="seo-hint">
+                    Description falls back to the first 160 characters of the post body when empty.
+                  </p>
+                </div>
+              </section>
+            </aside>
 
             <!-- ============ FRONTMATTER SIDEBAR ============ -->
             <aside class="ed-side" aria-label="Post settings">
@@ -307,7 +422,7 @@
                       letter-spacing: 0.06em;
                     "
                   >
-                    ⌘S saves. Autosave every 10s after typing stops.
+                    ⌘S saves. Autosave every 10s after typing stops. ⌘F finds / replaces.
                   </p>
                 </div>
               </details>

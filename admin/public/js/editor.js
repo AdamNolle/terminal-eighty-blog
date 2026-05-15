@@ -54,6 +54,7 @@
   const wordsTop = $('editor-words');
   const wordsFoot = $('foot-words');
   const wordsSide = $('editor-side-words');
+  const charsFoot = $('foot-chars');
   const readTop = $('editor-read');
   const readFoot = $('foot-read');
   const readSide = $('editor-side-read');
@@ -63,6 +64,30 @@
   const spDesc = $('sp-desc');
   const tagDataList = $('tag-suggestions');
   const fileFoot = $('foot-file');
+  // Phase 3d: autosave status pip in the editor status bar + the
+  // existing "Saved/Unsaved/Saving…/Error saving" text used in the
+  // top bar and editor head.
+  const autoEl = $('autosave-indicator');
+  const autoTxt = $('autosave-text');
+  // Phase 3d: SEO preview panel (right-side aux column). All four
+  // elements are present in editor.html; refs may be null in test envs
+  // that mount editor.js outside the production HTML shell.
+  const serpDomain = $('serp-domain');
+  const serpSlug = $('serp-slug');
+  const serpTitle = $('serp-title');
+  const serpDesc = $('serp-desc');
+  const seoTitleLen = $('seo-title-len');
+  const seoDescLen = $('seo-desc-len');
+  const seoTitleBar = $('seo-title-bar');
+  const seoDescBar = $('seo-desc-bar');
+  // Phase 3d: panel toggles (TOC + SEO).
+  const btnTocToggle = $('btn-toc-toggle');
+  const btnSeoToggle = $('btn-seo-toggle');
+  const tocPanel = $('ed-toc-panel');
+  const seoPanel = $('ed-seo-panel');
+  const tocCloseBtn = $('ed-toc-close');
+  const seoCloseBtn = $('ed-seo-close');
+  const edLayout = document.querySelector('.editor-layout');
 
   const urlParams = new URLSearchParams(window.location.search);
   // Accept either `?file=` (legacy) or `?slug=` (Phase 2 plan)
@@ -91,22 +116,138 @@
     statusPill.classList.toggle('pub', !isDraft);
     if (sideStatus) sideStatus.textContent = isDraft ? 'Draft' : 'Published';
   }
-  function updateMetrics() {
-    const text = (bodyEl?.value || '').trim();
-    const words = text ? text.split(/\s+/).length : 0;
-    const mins = Math.max(0, Math.ceil(words / 200));
-    const wText = `${words.toLocaleString()} word${words === 1 ? '' : 's'}`;
-    const rText = `${mins} min`;
-    if (wordsTop) wordsTop.textContent = wText;
-    if (wordsFoot) wordsFoot.textContent = words.toLocaleString();
-    if (wordsSide) wordsSide.textContent = words.toLocaleString();
-    if (readTop) readTop.textContent = rText;
-    if (readFoot) readFoot.textContent = mins.toString();
-    if (readSide) readSide.textContent = rText;
+
+  // Phase 3d: reading-time formula bumped from 200 → 250 wpm (industry
+  // standard for prose-style content). Status bar also surfaces a
+  // character count alongside the existing word count.
+  function computeMetrics() {
+    // Prefer the live TipTap textContent if available — strips
+    // Markdown punctuation we don't want to count as words.
+    const tipText =
+      bodyEl && bodyEl._tiptap && bodyEl._tiptap.state
+        ? bodyEl._tiptap.state.doc.textContent
+        : null;
+    const text = (tipText !== null ? tipText : bodyEl?.value || '').trim();
+    const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+    const chars = text ? text.length : 0;
+    const charsNoSpace = text ? text.replace(/\s+/g, '').length : 0;
+    const mins = words ? Math.max(1, Math.round(words / 250)) : 0;
+    return { words, chars, charsNoSpace, mins };
   }
+
+  // Phase 3d: throttle metric updates via rAF — large pastes can fire
+  // dozens of input events per frame.
+  let metricsFrame = null;
+  function updateMetrics() {
+    if (metricsFrame) return;
+    const requestFrame =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (cb) => setTimeout(cb, 16);
+    metricsFrame = requestFrame(() => {
+      metricsFrame = null;
+      const { words, chars, mins } = computeMetrics();
+      const wText = `${words.toLocaleString()} word${words === 1 ? '' : 's'}`;
+      const rText = `${mins} min`;
+      if (wordsTop) wordsTop.textContent = wText;
+      if (wordsFoot) wordsFoot.textContent = words.toLocaleString();
+      if (wordsSide) wordsSide.textContent = words.toLocaleString();
+      if (charsFoot) charsFoot.textContent = chars.toLocaleString();
+      if (readTop) readTop.textContent = rText;
+      if (readFoot) readFoot.textContent = mins.toString() + ' min';
+      if (readSide) readSide.textContent = rText;
+      updateSeoPreview();
+    });
+  }
+
   function updateSocialPreview() {
     if (spTitle) spTitle.textContent = (titleEl?.value || '').trim() || 'Post title';
     if (spDesc) spDesc.textContent = (descEl?.value || '').trim() || 'Description appears here…';
+  }
+
+  // Phase 3d: SEO preview (Google SERP snippet shape). Falls back to
+  // the first 160 chars of body text when the meta description is empty.
+  function siteDomain() {
+    // Hard-coded for now — Phase 9 will surface a per-site config.
+    return 'terminaleighty.com';
+  }
+  function updateSeoPreview() {
+    const title = (titleEl?.value || '').trim();
+    const slug = (slugEl?.value || '').trim() || 'post-slug';
+    let desc = (descEl?.value || '').trim();
+    if (!desc) {
+      const tipText =
+        bodyEl && bodyEl._tiptap && bodyEl._tiptap.state
+          ? bodyEl._tiptap.state.doc.textContent
+          : bodyEl?.value || '';
+      desc = String(tipText || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+    }
+    const displayTitle = title || 'Untitled post';
+    const displayDesc = desc || 'Description appears here.';
+    if (serpDomain) serpDomain.textContent = siteDomain();
+    if (serpSlug) serpSlug.textContent = slug;
+    if (serpTitle) serpTitle.textContent = displayTitle;
+    if (serpDesc) {
+      // Truncate at 160 chars per Google's common limit.
+      serpDesc.textContent =
+        displayDesc.length > 160 ? displayDesc.slice(0, 157) + '…' : displayDesc;
+    }
+    if (seoTitleLen) seoTitleLen.textContent = String(displayTitle.length);
+    if (seoDescLen) seoDescLen.textContent = String(displayDesc.length);
+    if (seoTitleBar) {
+      const pct = Math.min(100, Math.round((displayTitle.length / 60) * 100));
+      seoTitleBar.style.width = pct + '%';
+      seoTitleBar.parentElement?.classList?.toggle('is-over', displayTitle.length > 60);
+    }
+    if (seoDescBar) {
+      const pct = Math.min(100, Math.round((displayDesc.length / 160) * 100));
+      seoDescBar.style.width = pct + '%';
+      seoDescBar.parentElement?.classList?.toggle('is-over', displayDesc.length > 160);
+    }
+  }
+
+  // ── Phase 3d: autosave status pip ─────────────────────────
+  //
+  // Four states map to the four colours/visuals in editor.css:
+  //
+  //   idle  → "Ready"          (subtle, default)
+  //   dirty → "Unsaved changes" (warning tint)
+  //   saving → "Saving…"        (spinner)
+  //   saved → "Saved"           (accent; fades back to idle after 2s)
+  //   error → "Error saving"    (danger; clickable to retry)
+  //
+  // We also keep the top-bar `setSaved()` text in sync for the existing
+  // aria-live region so screen readers always announce the same state
+  // regardless of which surface they're tracking.
+  let savedFadeTimer = null;
+  function setAutoState(stateName, msg) {
+    if (!autoEl) return;
+    if (savedFadeTimer) {
+      clearTimeout(savedFadeTimer);
+      savedFadeTimer = null;
+    }
+    autoEl.dataset.state = stateName;
+    if (autoTxt) autoTxt.textContent = msg || stateName;
+    if (stateName === 'error') {
+      autoEl.setAttribute('role', 'button');
+      autoEl.setAttribute('tabindex', '0');
+      autoEl.title = 'Click to retry saving';
+    } else {
+      autoEl.removeAttribute('role');
+      autoEl.removeAttribute('tabindex');
+      autoEl.removeAttribute('title');
+    }
+    if (stateName === 'saved') {
+      savedFadeTimer = setTimeout(() => {
+        if (!isDirty && autoEl.dataset.state === 'saved') {
+          autoEl.dataset.state = 'idle';
+          if (autoTxt) autoTxt.textContent = 'Saved';
+        }
+      }, 2000);
+    }
   }
   function slugify(s) {
     return String(s || '')
@@ -117,6 +258,10 @@
   function markDirty() {
     isDirty = true;
     setSaved('Unsaved changes');
+    setAutoState('dirty', 'Unsaved changes');
+    if (editorRoot) {
+      editorRoot.dispatchEvent(new CustomEvent('autosave-dirty', { bubbles: true }));
+    }
     scheduleAutosave();
   }
   function setCurrentFile(filename) {
@@ -170,10 +315,13 @@
       setCurrentFile(filename);
       isDirty = false;
       setSaved('Saved');
+      setAutoState('saved', 'Saved');
       updateMetrics();
       updateSocialPreview();
+      updateSeoPreview();
       updateStatusPill();
     } catch (err) {
+      setAutoState('error', 'Failed to load');
       TE.toast(err.message || 'Failed to load post.', 'error');
     }
   }
@@ -200,6 +348,10 @@
     const method = currentFile ? 'PUT' : 'POST';
 
     setSaved('Saving…');
+    setAutoState('saving', 'Saving…');
+    if (editorRoot) {
+      editorRoot.dispatchEvent(new CustomEvent('autosave-start', { bubbles: true }));
+    }
     try {
       const result = await TE.fetchJSON(url, {
         method,
@@ -207,6 +359,15 @@
       });
       isDirty = false;
       setSaved('Saved');
+      setAutoState('saved', 'Saved');
+      if (editorRoot) {
+        editorRoot.dispatchEvent(
+          new CustomEvent('autosave-success', {
+            bubbles: true,
+            detail: { filename: result.filename || currentFile },
+          }),
+        );
+      }
       if (result.filename && result.filename !== currentFile) {
         setCurrentFile(result.filename);
       } else if (!currentFile && result.filename) {
@@ -216,6 +377,15 @@
       return true;
     } catch (err) {
       setSaved('Save failed');
+      setAutoState('error', 'Error saving');
+      if (editorRoot) {
+        editorRoot.dispatchEvent(
+          new CustomEvent('autosave-error', {
+            bubbles: true,
+            detail: { message: err && err.message },
+          }),
+        );
+      }
       TE.toast(err.message || 'Save failed.', 'error');
       return false;
     }
@@ -305,13 +475,20 @@
         lastAutoSlug = auto;
       }
       updateSocialPreview();
+      updateSeoPreview();
       markDirty();
     });
 
     // Dirty-tracking + UI updates
-    [slugEl, dateEl, draftEl, tagsEl].forEach((el) => el.addEventListener('input', markDirty));
+    [slugEl, dateEl, draftEl, tagsEl].forEach((el) =>
+      el.addEventListener('input', () => {
+        updateSeoPreview();
+        markDirty();
+      }),
+    );
     descEl.addEventListener('input', () => {
       updateSocialPreview();
+      updateSeoPreview();
       markDirty();
     });
     bodyEl.addEventListener('input', () => {
@@ -319,6 +496,68 @@
       markDirty();
     });
     draftEl.addEventListener('change', updateStatusPill);
+
+    // Phase 3d: autosave pip click → retry. The pip exposes role=button
+    // + tabindex=0 only while in the error state.
+    if (autoEl) {
+      const retry = () => {
+        if (autoEl.dataset.state !== 'error') return;
+        savePost();
+      };
+      autoEl.addEventListener('click', retry);
+      autoEl.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && autoEl.dataset.state === 'error') {
+          e.preventDefault();
+          retry();
+        }
+      });
+    }
+
+    // Phase 3d: TOC + SEO panel toggle buttons.
+    function setPanelOpen(panelKey, open) {
+      if (!edLayout) return;
+      edLayout.dataset[panelKey === 'toc' ? 'tocOpen' : 'seoOpen'] = open ? 'true' : 'false';
+      try {
+        localStorage.setItem('te-editor-panel-' + panelKey, open ? '1' : '0');
+      } catch (_) {
+        /* ignore — privacy mode or quota */
+      }
+      const panel = panelKey === 'toc' ? tocPanel : seoPanel;
+      const btn = panelKey === 'toc' ? btnTocToggle : btnSeoToggle;
+      if (panel) panel.hidden = !open;
+      if (btn) btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+      // Hide the entire aux column when both panels are closed.
+      const aux = document.getElementById('ed-aux');
+      if (aux) {
+        const tocOpen = edLayout.dataset.tocOpen === 'true';
+        const seoOpen = edLayout.dataset.seoOpen === 'true';
+        aux.hidden = !tocOpen && !seoOpen;
+      }
+    }
+    // Restore persisted state.
+    try {
+      const tocStored = localStorage.getItem('te-editor-panel-toc');
+      const seoStored = localStorage.getItem('te-editor-panel-seo');
+      setPanelOpen('toc', tocStored === null ? true : tocStored === '1');
+      setPanelOpen('seo', seoStored === '1');
+    } catch (_) {
+      setPanelOpen('toc', true);
+      setPanelOpen('seo', false);
+    }
+    if (btnTocToggle) {
+      btnTocToggle.addEventListener('click', () => {
+        const open = edLayout?.dataset.tocOpen !== 'true';
+        setPanelOpen('toc', open);
+      });
+    }
+    if (btnSeoToggle) {
+      btnSeoToggle.addEventListener('click', () => {
+        const open = edLayout?.dataset.seoOpen !== 'true';
+        setPanelOpen('seo', open);
+      });
+    }
+    if (tocCloseBtn) tocCloseBtn.addEventListener('click', () => setPanelOpen('toc', false));
+    if (seoCloseBtn) seoCloseBtn.addEventListener('click', () => setPanelOpen('seo', false));
 
     // Action buttons (both top + sidebar copies)
     [btnSave, btnSave2].forEach((b) => b && b.addEventListener('click', savePost));
@@ -390,8 +629,10 @@
       setCurrentFile(null);
       updateMetrics();
       updateSocialPreview();
+      updateSeoPreview();
       updateStatusPill();
       setSaved('');
+      setAutoState('idle', 'Ready');
     }
     loadTagSuggestions();
   }

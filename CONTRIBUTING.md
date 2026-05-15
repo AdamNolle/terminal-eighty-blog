@@ -227,6 +227,94 @@ dispatched as `editor-save` / `editor-publish` custom events on
 `#editor-root`. `admin/public/js/editor.js` listens for both and routes
 them through its existing `savePost()` / `publishSite()` flow.
 
+### Find & replace (Phase 3d)
+
+| Shortcut      | Action                                  |
+| ------------- | --------------------------------------- |
+| `Mod+F`       | Open the in-editor find / replace modal |
+| `Enter`       | Jump to the next match                  |
+| `Shift+Enter` | Jump to the previous match              |
+| `Alt+Enter`   | Replace the current match               |
+| `Esc`         | Close the modal, clear highlights       |
+
+The modal is pinned to the top-right of the editor pane (not the
+browser's native find bar). Options live as inline checkboxes:
+
+- **Aa** — case-sensitive
+- **W** — whole word (regex `\b…\b`)
+- **.\*** — interpret the query as a regular expression
+
+The modal works in both **Rich** and **Markdown** modes — WYSIWYG uses
+a ProseMirror decoration plugin to highlight matches in place, while
+the Markdown source mode delegates to `@codemirror/search`'s
+`findNext` / `replaceNext` / `replaceAll` commands.
+
+Focus is trapped inside the modal; `Esc` returns focus to whatever was
+focused before the modal opened (typically the editor surface).
+
+### Block reorder (drag-handle)
+
+Hover any top-level block (heading, paragraph, blockquote, code block,
+table, image) to surface a `⋮⋮` grab handle in the left margin. Drag
+the handle to drop the block at a new position — a blue line indicates
+the drop target while dragging; the dragged block fades during the
+gesture.
+
+Keyboard alternative:
+
+| Shortcut              | Action                                                     |
+| --------------------- | ---------------------------------------------------------- |
+| `Alt+Shift+ArrowUp`   | Move the top-level block containing the cursor up one slot |
+| `Alt+Shift+ArrowDown` | Move the top-level block containing the cursor down        |
+
+### TOC + SEO panels
+
+Two toggleable right-side panels live between the editor pane and the
+frontmatter sidebar. Their open/closed state persists to
+`localStorage` per browser.
+
+- **Table of contents** — auto-generated from every H1–H6 in the doc,
+  indented by level. Click a heading to jump there + move the
+  selection. The heading containing the cursor gets
+  `aria-current="location"` and is visually highlighted.
+- **SEO preview** — Google SERP-shaped snippet showing the rendered
+  title, site URL with slug, and meta description (falls back to the
+  first 160 chars of the post body when the meta description is
+  empty). Two progress bars warn when the title exceeds 60 chars or the
+  description exceeds 160 chars.
+
+Topbar buttons (`≡` for TOC, `⌕` for SEO) toggle each panel. The aux
+column is removed from the grid entirely when both panels are closed,
+giving the editor the full main width.
+
+### Status bar + autosave indicator
+
+The editor pane has a fixed status bar at the bottom showing
+`<words> · <chars> · <reading-time>`. Reading time uses the industry-
+standard 250 wpm. Metrics update via `requestAnimationFrame` on every
+input event so large pastes don't thrash the UI.
+
+The autosave indicator (right side of the status bar) has four states:
+
+| State    | Visual                       | Behaviour                                            |
+| -------- | ---------------------------- | ---------------------------------------------------- |
+| `idle`   | Muted grey pip               | No pending changes; this is the resting state        |
+| `dirty`  | Warning-coloured pip         | Unsaved edits, autosave countdown running            |
+| `saving` | Pulsing accent pip           | Save in flight                                       |
+| `saved`  | Accent pip, soft background  | Last save succeeded — fades back to `idle` after 2 s |
+| `error`  | Danger pip, clickable button | Last save failed — click or `Enter`/`Space` to retry |
+
+The pip wraps the existing autosave write logic in `editor.js`. Custom
+events fire on `#editor-root` so future Phase-4+ features (offline
+queueing, federation hooks) can subscribe without monkey-patching:
+
+| Event              | Detail         |
+| ------------------ | -------------- |
+| `autosave-dirty`   | (none)         |
+| `autosave-start`   | (none)         |
+| `autosave-success` | `{ filename }` |
+| `autosave-error`   | `{ message }`  |
+
 ### Mode toggle
 
 The editor toolbar's rightmost group toggles between **Rich** (WYSIWYG)
