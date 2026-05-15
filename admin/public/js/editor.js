@@ -461,9 +461,83 @@
     return false;
   }
 
+  // ── Phase 4: editor inline drop zone ──────────────────────
+  //
+  // Catches files dropped anywhere on the editor surface (#editor-root)
+  // and uploads them. For images we call TipTap's `setImage()` so the
+  // image lands at the cursor; for non-images we insert a paragraph
+  // placeholder ("[File: name.ext]") that Phase 6's attachment node
+  // will eventually replace. We don't show a visible dropzone here —
+  // the global body dropzone already handles "no editor focus" cases.
+  function wireEditorDrop() {
+    if (!editorRoot) return;
+    let depth = 0;
+    function isFileDrag(e) {
+      return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    }
+    editorRoot.addEventListener('dragenter', (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      depth += 1;
+      editorRoot.classList.add('is-dragover');
+    });
+    editorRoot.addEventListener('dragover', (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    editorRoot.addEventListener('dragleave', () => {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) editorRoot.classList.remove('is-dragover');
+    });
+    editorRoot.addEventListener('drop', async (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      depth = 0;
+      editorRoot.classList.remove('is-dragover');
+      const files = Array.from(e.dataTransfer.files || []);
+      if (!files.length || !window.TE || !TE.media) return;
+      const { ok, failed } = await TE.media.upload(files);
+      for (const item of ok) insertMediaIntoEditor(item);
+      if (failed.length) TE.toast(failed.map((f) => f.error).join(' / '), 'error');
+    });
+  }
+
+  function insertMediaIntoEditor(item) {
+    if (!item || !item.url) return;
+    const isImage = (item.type || (item.mime_type || '').split('/')[0]) === 'image';
+    const tt = bodyEl && bodyEl._tiptap;
+    if (tt && tt.chain) {
+      if (isImage) {
+        tt.chain()
+          .focus()
+          .setImage({ src: item.url, alt: item.original_name || '' })
+          .run();
+      } else {
+        const label = `[File: ${item.original_name || item.filename}](${item.url})`;
+        tt.chain().focus().insertContent(`\n\n${label}\n\n`).run();
+      }
+      markDirty();
+      updateMetrics();
+      return;
+    }
+    // Fallback textarea — splice markdown at the cursor.
+    const md = isImage
+      ? `\n![${item.original_name || ''}](${item.url})\n`
+      : `\n[File: ${item.original_name || item.filename}](${item.url})\n`;
+    const start = bodyEl.selectionStart || 0;
+    const end = bodyEl.selectionEnd || 0;
+    bodyEl.value = bodyEl.value.slice(0, start) + md + bodyEl.value.slice(end);
+    bodyEl.selectionStart = bodyEl.selectionEnd = start + md.length;
+    bodyEl.focus && bodyEl.focus();
+    markDirty();
+    updateMetrics();
+  }
+
   // ── Wire DOM ──────────────────────────────────────────────
   function boot() {
     mountEditor();
+    wireEditorDrop();
 
     // Title → slug auto-fill (only when slug is empty or matches the
     // previous auto-derived slug).

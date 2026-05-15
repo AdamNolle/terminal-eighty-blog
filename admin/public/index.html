@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="/css/fonts.css" />
     <link rel="stylesheet" href="/css/admin.css" />
     <link rel="stylesheet" href="/css/dashboard.css" />
+    <link rel="stylesheet" href="/css/media.css" />
     <!-- WebAuthn browser library (CDN — passkey registration). Wrapped
        in try/catch in auth.js so an ad-blocker doesn't crash the page. -->
     <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
@@ -146,166 +147,336 @@
         </header>
 
         <div id="main" class="stage">
-          <div class="sec-head">
-            <div>
-              <h1 class="sec-title">Dashboard</h1>
-              <div class="sec-sub" id="dash-sub">Loading…</div>
-            </div>
-            <div class="sec-actions">
-              <a class="btn" href="/editor.html">+ Draft</a>
-              <button type="button" class="btn primary" id="btn-publish-2">Publish</button>
-            </div>
-          </div>
-
-          <!-- Posts table -->
-          <div class="panel" id="posts-panel">
-            <div class="panel-head">
-              <span class="panel-title"><span class="ind">▾</span>Posts</span>
-              <div class="panel-head-r">
-                <span id="posts-total">—</span>
+          <div id="view-dashboard">
+            <div class="sec-head">
+              <div>
+                <h1 class="sec-title">Dashboard</h1>
+                <div class="sec-sub" id="dash-sub">Loading…</div>
+              </div>
+              <div class="sec-actions">
+                <a class="btn" href="/editor.html">+ Draft</a>
+                <button type="button" class="btn primary" id="btn-publish-2">Publish</button>
               </div>
             </div>
 
-            <div class="tabs" role="tablist" aria-label="Filter posts by status">
-              <button type="button" class="tab" role="tab" data-tab="all" aria-selected="true">
-                All <span class="count" id="tab-count-all">—</span>
-              </button>
-              <button type="button" class="tab" role="tab" data-tab="draft" aria-selected="false">
-                Draft <span class="count" id="tab-count-draft">—</span>
-              </button>
-              <button
-                type="button"
-                class="tab"
-                role="tab"
-                data-tab="scheduled"
-                aria-selected="false"
-              >
-                Scheduled <span class="count" id="tab-count-scheduled">—</span>
-              </button>
-              <button
-                type="button"
-                class="tab"
-                role="tab"
-                data-tab="published"
-                aria-selected="false"
-              >
-                Published <span class="count" id="tab-count-published">—</span>
-              </button>
-            </div>
-
-            <div class="posts-toolbar">
-              <label class="search">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  aria-hidden="true"
-                >
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="m21 21-4.3-4.3" />
-                </svg>
-                <span class="sr-only">Filter posts</span>
-                <input
-                  type="search"
-                  id="posts-search"
-                  placeholder="Filter by title, slug, or tag…"
-                  autocomplete="off"
-                />
-              </label>
-              <span class="count" id="posts-visible">—</span>
-            </div>
-
-            <div class="row-grid head" role="row">
-              <span class="r-link" aria-hidden="true">
-                <span class="r-num">№</span>
-                <span class="r-title-wrap">Title</span>
-                <span class="r-status" style="text-align: right">Tags</span>
-                <span class="r-date">Date</span>
-              </span>
-              <span class="r-actions" aria-hidden="true"></span>
-            </div>
-            <div id="posts-rows">
-              <div class="posts-empty" id="posts-loading">Loading posts…</div>
-            </div>
-            <div class="posts-foot">
-              <span id="posts-foot-text">—</span>
-              <a href="/editor.html">+ New post →</a>
-            </div>
-          </div>
-
-          <!-- System health + security side panels -->
-          <div class="dash-grid" style="margin-top: 24px">
-            <div class="panel health-panel" id="health-panel" aria-label="Pi system health">
+            <!-- Posts table -->
+            <div class="panel" id="posts-panel">
               <div class="panel-head">
-                <span class="panel-title"><span class="ind">▾</span>Pi Health</span>
+                <span class="panel-title"><span class="ind">▾</span>Posts</span>
                 <div class="panel-head-r">
-                  <span>UP <b id="health-uptime" style="color: var(--fg)">—</b></span>
-                  <button type="button" class="btn-mini" id="btn-refresh-health">Refresh</button>
+                  <span id="posts-total">—</span>
                 </div>
               </div>
-              <div class="panel-body">
-                <div class="metric" id="metric-cpu">
-                  <span class="metric-label">CPU</span>
-                  <span class="metric-val" id="metric-cpu-val">—</span>
-                  <span class="metric-bar"><i id="metric-cpu-bar" style="width: 0%"></i></span>
-                </div>
-                <div class="metric" id="metric-ram">
-                  <span class="metric-label">RAM</span>
-                  <span class="metric-val" id="metric-ram-val">—</span>
-                  <span class="metric-bar"><i id="metric-ram-bar" style="width: 0%"></i></span>
-                </div>
-                <div class="metric" id="metric-temp">
-                  <span class="metric-label">TEMP</span>
-                  <span class="metric-val" id="metric-temp-val">—</span>
-                  <span class="metric-bar"><i id="metric-temp-bar" style="width: 0%"></i></span>
-                </div>
-                <div class="metric" id="metric-disk">
-                  <span class="metric-label">DISK</span>
-                  <span class="metric-val" id="metric-disk-val">—</span>
-                  <span class="metric-bar"><i id="metric-disk-bar" style="width: 0%"></i></span>
-                </div>
 
-                <h4 class="health-section-label">Docker containers</h4>
-                <div id="docker-list">
-                  <div class="docker">
-                    <span class="ddot" aria-hidden="true"></span><span class="name">…</span
-                    ><span class="status">loading</span>
+              <div class="tabs" role="tablist" aria-label="Filter posts by status">
+                <button type="button" class="tab" role="tab" data-tab="all" aria-selected="true">
+                  All <span class="count" id="tab-count-all">—</span>
+                </button>
+                <button type="button" class="tab" role="tab" data-tab="draft" aria-selected="false">
+                  Draft <span class="count" id="tab-count-draft">—</span>
+                </button>
+                <button
+                  type="button"
+                  class="tab"
+                  role="tab"
+                  data-tab="scheduled"
+                  aria-selected="false"
+                >
+                  Scheduled <span class="count" id="tab-count-scheduled">—</span>
+                </button>
+                <button
+                  type="button"
+                  class="tab"
+                  role="tab"
+                  data-tab="published"
+                  aria-selected="false"
+                >
+                  Published <span class="count" id="tab-count-published">—</span>
+                </button>
+              </div>
+
+              <div class="posts-toolbar">
+                <label class="search">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    aria-hidden="true"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m21 21-4.3-4.3" />
+                  </svg>
+                  <span class="sr-only">Filter posts</span>
+                  <input
+                    type="search"
+                    id="posts-search"
+                    placeholder="Filter by title, slug, or tag…"
+                    autocomplete="off"
+                  />
+                </label>
+                <span class="count" id="posts-visible">—</span>
+              </div>
+
+              <div class="row-grid head" role="row">
+                <span class="r-link" aria-hidden="true">
+                  <span class="r-num">№</span>
+                  <span class="r-title-wrap">Title</span>
+                  <span class="r-status" style="text-align: right">Tags</span>
+                  <span class="r-date">Date</span>
+                </span>
+                <span class="r-actions" aria-hidden="true"></span>
+              </div>
+              <div id="posts-rows">
+                <div class="posts-empty" id="posts-loading">Loading posts…</div>
+              </div>
+              <div class="posts-foot">
+                <span id="posts-foot-text">—</span>
+                <a href="/editor.html">+ New post →</a>
+              </div>
+            </div>
+
+            <!-- System health + security side panels -->
+            <div class="dash-grid" style="margin-top: 24px">
+              <div class="panel health-panel" id="health-panel" aria-label="Pi system health">
+                <div class="panel-head">
+                  <span class="panel-title"><span class="ind">▾</span>Pi Health</span>
+                  <div class="panel-head-r">
+                    <span>UP <b id="health-uptime" style="color: var(--fg)">—</b></span>
+                    <button type="button" class="btn-mini" id="btn-refresh-health">Refresh</button>
                   </div>
                 </div>
+                <div class="panel-body">
+                  <div class="metric" id="metric-cpu">
+                    <span class="metric-label">CPU</span>
+                    <span class="metric-val" id="metric-cpu-val">—</span>
+                    <span class="metric-bar"><i id="metric-cpu-bar" style="width: 0%"></i></span>
+                  </div>
+                  <div class="metric" id="metric-ram">
+                    <span class="metric-label">RAM</span>
+                    <span class="metric-val" id="metric-ram-val">—</span>
+                    <span class="metric-bar"><i id="metric-ram-bar" style="width: 0%"></i></span>
+                  </div>
+                  <div class="metric" id="metric-temp">
+                    <span class="metric-label">TEMP</span>
+                    <span class="metric-val" id="metric-temp-val">—</span>
+                    <span class="metric-bar"><i id="metric-temp-bar" style="width: 0%"></i></span>
+                  </div>
+                  <div class="metric" id="metric-disk">
+                    <span class="metric-label">DISK</span>
+                    <span class="metric-val" id="metric-disk-val">—</span>
+                    <span class="metric-bar"><i id="metric-disk-bar" style="width: 0%"></i></span>
+                  </div>
 
-                <h4 class="health-section-label">Backup</h4>
-                <div
-                  id="backup-status"
-                  style="font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim)"
-                >
-                  —
+                  <h4 class="health-section-label">Docker containers</h4>
+                  <div id="docker-list">
+                    <div class="docker">
+                      <span class="ddot" aria-hidden="true"></span><span class="name">…</span
+                      ><span class="status">loading</span>
+                    </div>
+                  </div>
+
+                  <h4 class="health-section-label">Backup</h4>
+                  <div
+                    id="backup-status"
+                    style="font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim)"
+                  >
+                    —
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel" id="security-panel" aria-label="Security">
+                <div class="panel-head">
+                  <span class="panel-title"><span class="ind">▾</span>Security</span>
+                  <span id="passkey-status" class="panel-head-r" aria-live="polite"></span>
+                </div>
+                <div class="panel-body">
+                  <p style="margin: 0 0 12px; color: var(--fg-dim)">
+                    Register a passkey on this device to sign in with Face ID or Touch ID next time.
+                  </p>
+                  <button type="button" class="btn primary" id="btn-register-passkey">
+                    Register passkey
+                  </button>
+                  <p style="margin: 14px 0 0; color: var(--fg-mute); font-size: 11px">
+                    Phase 2 ships with passkey + password. Comments link uses a separate session
+                    (Remark42).
+                  </p>
                 </div>
               </div>
             </div>
-
-            <div class="panel" id="security-panel" aria-label="Security">
-              <div class="panel-head">
-                <span class="panel-title"><span class="ind">▾</span>Security</span>
-                <span id="passkey-status" class="panel-head-r" aria-live="polite"></span>
+          </div>
+          <!-- ============ MEDIA LIBRARY VIEW (Phase 4) ============ -->
+          <div id="view-media" hidden>
+            <div class="sec-head">
+              <div>
+                <h1 class="sec-title">Media library</h1>
+                <div class="sec-sub" id="media-sub">Universal uploads · drag anywhere to add</div>
               </div>
-              <div class="panel-body">
-                <p style="margin: 0 0 12px; color: var(--fg-dim)">
-                  Register a passkey on this device to sign in with Face ID or Touch ID next time.
-                </p>
-                <button type="button" class="btn primary" id="btn-register-passkey">
-                  Register passkey
-                </button>
-                <p style="margin: 14px 0 0; color: var(--fg-mute); font-size: 11px">
-                  Phase 2 ships with passkey + password. Comments link uses a separate session
-                  (Remark42).
-                </p>
+              <div class="sec-actions">
+                <a class="btn" href="#dashboard">← Dashboard</a>
               </div>
             </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <span class="panel-title"><span class="ind">▾</span>Library</span>
+                <div class="panel-head-r">
+                  <span id="media-total" aria-live="polite"></span>
+                </div>
+              </div>
+
+              <div class="te-media-head">
+                <div class="te-media-chips" role="tablist" aria-label="Filter media by type">
+                  <button
+                    type="button"
+                    class="te-media-chip active"
+                    data-media-chip="all"
+                    aria-selected="true"
+                  >
+                    All <span class="count">0</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="te-media-chip"
+                    data-media-chip="image"
+                    aria-selected="false"
+                  >
+                    Image <span class="count">0</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="te-media-chip"
+                    data-media-chip="video"
+                    aria-selected="false"
+                  >
+                    Video <span class="count">0</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="te-media-chip"
+                    data-media-chip="audio"
+                    aria-selected="false"
+                  >
+                    Audio <span class="count">0</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="te-media-chip"
+                    data-media-chip="document"
+                    aria-selected="false"
+                  >
+                    Document <span class="count">0</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="te-media-chip"
+                    data-media-chip="archive"
+                    aria-selected="false"
+                  >
+                    Archive <span class="count">0</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="te-media-chip"
+                    data-media-chip="other"
+                    aria-selected="false"
+                  >
+                    Other <span class="count">0</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="te-media-toolbar">
+                <label class="sr-only" for="media-search">Search media</label>
+                <input
+                  id="media-search"
+                  type="search"
+                  placeholder="Search by filename…"
+                  autocomplete="off"
+                />
+                <label class="sr-only" for="media-sort">Sort media</label>
+                <select id="media-sort" aria-label="Sort media">
+                  <option value="date">Newest first</option>
+                  <option value="name">Name (A → Z)</option>
+                  <option value="size">Largest first</option>
+                </select>
+                <span class="te-media-spacer"></span>
+                <label
+                  style="
+                    display: inline-flex;
+                    gap: 6px;
+                    align-items: center;
+                    font-family: var(--mono, monospace);
+                    font-size: 11px;
+                    color: var(--fg-mute);
+                  "
+                >
+                  <input type="checkbox" id="media-select-all" />
+                  Select all
+                </label>
+                <span class="te-view-toggle" role="group" aria-label="Layout">
+                  <button
+                    type="button"
+                    data-media-view="grid"
+                    aria-pressed="true"
+                    aria-label="Grid view"
+                  >
+                    ▦
+                  </button>
+                  <button
+                    type="button"
+                    data-media-view="list"
+                    aria-pressed="false"
+                    aria-label="List view"
+                  >
+                    ≡
+                  </button>
+                </span>
+              </div>
+
+              <div id="media-library-dropzone" class="te-dz" aria-label="Upload to library">
+                <span class="te-dz-label">Drop files to upload, or click to choose</span>
+              </div>
+
+              <div id="media-grid" class="view-grid" role="grid" aria-label="Uploaded media"></div>
+              <div id="media-empty" class="te-media-empty" hidden></div>
+            </div>
           </div>
+          <!-- ============ /MEDIA LIBRARY VIEW ============ -->
         </div>
       </main>
     </div>
+
+    <!-- Bulk action bar (shown by media.js when items are selected) -->
+    <div
+      class="te-media-bulk-bar"
+      id="media-bulk-bar"
+      role="region"
+      aria-label="Bulk media actions"
+      hidden
+    >
+      <span><b id="media-bulk-count">0</b> selected</span>
+      <button type="button" class="btn danger" id="media-bulk-delete">Delete selected</button>
+    </div>
+
+    <!-- Detail drawer -->
+    <aside
+      class="te-media-drawer"
+      id="media-drawer"
+      role="dialog"
+      aria-modal="false"
+      aria-hidden="true"
+      aria-labelledby="media-drawer-title"
+    >
+      <header class="te-media-drawer-head">
+        <span id="media-drawer-title">[ FILE DETAILS ]</span>
+        <button type="button" class="btn ghost" id="media-drawer-close" aria-label="Close details">
+          ✕
+        </button>
+      </header>
+      <div id="media-drawer-body" class="te-media-drawer-body"></div>
+    </aside>
 
     <!-- Terminal modal -->
     <div
@@ -384,5 +555,7 @@ Allowed commands run with timeout=15s. Type a command and press Enter.
     <script src="/js/auth.js"></script>
     <script src="/js/terminal.js"></script>
     <script src="/js/dashboard.js"></script>
+    <script src="/js/dropzone.js"></script>
+    <script src="/js/media.js"></script>
   </body>
 </html>

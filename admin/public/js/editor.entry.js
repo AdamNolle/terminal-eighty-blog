@@ -3082,14 +3082,22 @@ export function mount(rootEl, initialMarkdown, options) {
   );
   gInsert.appendChild(
     tbBtn({
-      label: 'Image (Phase 4 wires media)',
+      label: 'Image',
       shortcut: '',
       glyph: '▣',
-      className: 'is-placeholder',
       active: () => false,
       run: () => {
-        // Phase 4 will wire this to the media picker. For now, prompt
-        // for a URL so the button isn't entirely inert.
+        // Phase 4: open the editor's hidden file input via the existing
+        // `te-slash-image` event that editor.js wires to the sidebar
+        // uploader. If the page doesn't render a sidebar uploader (test
+        // harness, embedded preview), fall back to a URL prompt so the
+        // button still does something.
+        const slashImage = new CustomEvent('te-slash-image', { bubbles: true });
+        const fileInput = document.getElementById('ed-file-input');
+        if (fileInput && typeof fileInput.click === 'function') {
+          rootEl.dispatchEvent(slashImage);
+          return;
+        }
         const url = window.prompt('Image URL');
         if (!url) return;
         if (!isSafeLinkUrl(url)) {

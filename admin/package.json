@@ -9,7 +9,7 @@
     "dev": "node --watch server.js",
     "build:editor": "NODE_ENV=production node scripts/build-editor.mjs",
     "dev:editor": "node scripts/build-editor.mjs --watch",
-    "test": "node --test --test-reporter spec test/auth.test.js",
+    "test": "node --test --test-reporter spec test/auth.test.js test/media.test.js",
     "lint": "cd .. && npm run lint:js -- admin/"
   },
   "dependencies": {
@@ -42,6 +42,7 @@
     "express-rate-limit": "^7.4.1",
     "gray-matter": "^4.0.3",
     "helmet": "^8.0.0",
+    "image-size": "^2.0.2",
     "katex": "^0.16.46",
     "lowlight": "^3.3.0",
     "markdown-it": "^14.1.1",
