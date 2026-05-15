@@ -3,6 +3,7 @@
 This folder contains the official migration script to convert a Ghost blog export into Markdown files optimized for the **Terminal Eighty** Hugo architecture.
 
 ## What it does
+
 - Converts Ghost JSON exports to Markdown.
 - Automatically downloads all images from your live Ghost site.
 - Rewrites image paths in your Markdown files to match Hugo's `static/images` structure.
@@ -10,12 +11,14 @@ This folder contains the official migration script to convert a Ghost blog expor
 - Converts Ghost "Bookmark Cards" and "Image Cards" into standard Markdown syntax.
 
 ## Prerequisites
+
 1. Node.js installed on your machine.
 2. A `.json` export file from your Ghost admin panel (`Settings -> Labs -> Export`).
 
 ## Usage
 
 1. **Install Dependencies**
+
    ```bash
    cd migrate
    npm install
@@ -23,6 +26,7 @@ This folder contains the official migration script to convert a Ghost blog expor
 
 2. **Run the Migration Script**
    Place your Ghost `.json` file in this directory and run:
+
    ```bash
    node migrate.js --input your-ghost-export.json \
                    --output ../site/content \
