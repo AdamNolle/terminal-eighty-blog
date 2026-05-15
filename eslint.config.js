@@ -36,6 +36,10 @@ export default [
       'site/resources/**',
       'admin/data/**',
       // admin/public/ lints below as a browser-IIFE block (Phase 2).
+      // The bundled editor (Phase 3a) is generated; we lint its
+      // source (admin/public/js/editor.entry.js) instead.
+      'admin/public/js/editor.bundle.js',
+      'admin/public/js/editor.bundle.js.map',
       'Blog/**',
       '.planning/**',
       'coverage/**',
@@ -70,9 +74,13 @@ export default [
     },
   },
 
-  // Admin browser frontend (Phase 2 — plain script IIFEs)
+  // Admin browser frontend (Phase 2 — plain script IIFEs).
+  // editor.entry.js is the Phase 3a bundle source and is *not* an
+  // IIFE — esbuild consumes it as an ES module — so it gets its own
+  // block below.
   {
     files: ['admin/public/js/**/*.js'],
+    ignores: ['admin/public/js/editor.entry.js', 'admin/public/js/editor.bundle.js'],
     plugins: { security },
     languageOptions: {
       ecmaVersion: 2024,
@@ -93,6 +101,29 @@ export default [
       'jsdoc/require-param-description': 'off',
       'jsdoc/require-returns-description': 'off',
       'jsdoc/tag-lines': 'off',
+    },
+  },
+
+  // Phase 3a TipTap + CodeMirror bundle source. ES module input to
+  // esbuild; bundled into editor.bundle.js (linted-out).
+  {
+    files: ['admin/public/js/editor.entry.js'],
+    plugins: { security },
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: 'module',
+      globals: { ...globals.browser },
+    },
+    rules: {
+      ...sharedRules,
+      'security/detect-object-injection': 'off',
+      'jsdoc/require-jsdoc': 'off',
+      'jsdoc/require-param': 'off',
+      'jsdoc/require-param-description': 'off',
+      'jsdoc/require-returns': 'off',
+      'jsdoc/require-returns-description': 'off',
+      'jsdoc/tag-lines': 'off',
+      'jsdoc/no-multi-asterisks': 'off',
     },
   },
 

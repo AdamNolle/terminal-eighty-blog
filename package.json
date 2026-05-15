@@ -26,11 +26,12 @@
     "test:admin": "cd admin && npm test",
     "test:e2e": "playwright test --config=playwright.config.js",
     "test:lighthouse": "lhci autorun --config=lighthouserc.json",
-    "build": "cd site && hugo --gc --minify --printPathWarnings",
+    "build": "npm run build:editor && cd site && hugo --gc --minify --printPathWarnings",
+    "build:editor": "cd admin && npm run build:editor",
     "build:check": "cd site && hugo --gc --minify --printPathWarnings && cd .. && npm run lint:html-site",
     "dev:site": "cd site && hugo server -D --port 1414 --bind 127.0.0.1",
     "dev:admin": "cd admin && npm run dev",
-    "prepare": "husky || true"
+    "prepare": "husky || true && npm run build:editor --silent || true"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.0",

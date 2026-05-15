@@ -154,10 +154,16 @@
               </div>
 
               <div class="ed-body">
-                <!-- Phase 3: TipTap mount here.
-                   The fallback textarea is shown until Phase 3 wires
-                   a rich-text editor into #editor-root. -->
-                <div id="editor-root" data-phase="2-fallback">
+                <!--
+                  Phase 3a: TipTap (WYSIWYG) + CodeMirror (Markdown source).
+                  Bundled via admin/scripts/build-editor.mjs to editor.bundle.js.
+                  The bundle's mount() takes over this element, inserts its own
+                  toolbar + ProseMirror + CM6 surfaces, and appends a hidden
+                  <textarea id="editor-fallback"> as the Markdown source-of-truth
+                  for editor.js / media.js consumers. If JS fails to load, the
+                  <noscript> message + the prerendered <textarea> stay usable.
+                -->
+                <div id="editor-root" data-phase="3a">
                   <noscript>
                     <p style="color: var(--danger); font-family: var(--mono); font-size: 12px">
                       JavaScript required to edit posts.
@@ -166,7 +172,7 @@
                   <label class="sr-only" for="editor-fallback">Post body (Markdown)</label>
                   <textarea
                     id="editor-fallback"
-                    placeholder="Write your post in Markdown… Phase 3 swaps this for TipTap + CodeMirror."
+                    placeholder="Write your post in Markdown…"
                     spellcheck="true"
                     autocomplete="off"
                   ></textarea>
@@ -316,6 +322,8 @@
     <script src="/js/common.js"></script>
     <script src="/js/auth.js"></script>
     <script src="/js/media.js"></script>
+    <!-- TipTap + CodeMirror bundle. Built by admin/scripts/build-editor.mjs. -->
+    <script src="/js/editor.bundle.js"></script>
     <script src="/js/editor.js"></script>
   </body>
 </html>
