@@ -7,11 +7,15 @@ FROM node:20-alpine
 #   vips-dev           — libvips runtime + headers for sharp (Phase 5 image pipeline)
 #   libheif, libheif-tools
 #                      — HEIC/HEIF decode support (Phase 5 image handler)
+#   ffmpeg             — Phase 5b video/audio/animated-GIF transcode.
+#                       Alpine's ffmpeg build includes libx264, libvpx,
+#                       libmp3lame, libopus, and the loudnorm filter.
 # sharp ships prebuilts for musl-arm64, but bundling vips/libheif keeps
 # the fallback build path working and provides the heif decoder libvips
 # dlopens at runtime.
 RUN apk add --no-cache git procps python3 make g++ \
-    vips vips-tools vips-dev libheif libheif-tools
+    vips vips-tools vips-dev libheif libheif-tools \
+    ffmpeg
 
 WORKDIR /app
 
