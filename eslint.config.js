@@ -35,7 +35,7 @@ export default [
       'site/public/**',
       'site/resources/**',
       'admin/data/**',
-      'admin/public/**', // legacy admin frontend (Phase 2 will redo it)
+      // admin/public/ lints below as a browser-IIFE block (Phase 2).
       'Blog/**',
       '.planning/**',
       'coverage/**',
@@ -51,9 +51,55 @@ export default [
   promise.configs['flat/recommended'],
   jsdoc.configs['flat/recommended'],
 
+  // Admin service worker — separate globals from browser frontend.
+  {
+    files: ['admin/public/sw.js'],
+    plugins: { security },
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: 'script',
+      globals: { ...globals.serviceworker },
+    },
+    rules: {
+      ...sharedRules,
+      'promise/catch-or-return': 'off',
+      'promise/always-return': 'off',
+      'promise/no-nesting': 'off',
+      'jsdoc/require-jsdoc': 'off',
+      'jsdoc/tag-lines': 'off',
+    },
+  },
+
+  // Admin browser frontend (Phase 2 — plain script IIFEs)
+  {
+    files: ['admin/public/js/**/*.js'],
+    plugins: { security },
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: 'script',
+      globals: {
+        ...globals.browser,
+        // CDN-loaded library; auth.js guards against `undefined`.
+        SimpleWebAuthnBrowser: 'readonly',
+        // common.js publishes to window.TE; other modules consume it.
+        TE: 'readonly',
+      },
+    },
+    rules: {
+      ...sharedRules,
+      // The /* global TE */ comment at the top of each module is the
+      // canonical way to declare consumption. No further config needed.
+      'jsdoc/require-jsdoc': 'off',
+      'jsdoc/require-param-description': 'off',
+      'jsdoc/require-returns-description': 'off',
+      'jsdoc/tag-lines': 'off',
+    },
+  },
+
   // Admin (Node, ESM)
   {
     files: ['admin/**/*.js'],
+    ignores: ['admin/public/**'],
     plugins: { security, n },
     languageOptions: {
       ecmaVersion: 2024,
