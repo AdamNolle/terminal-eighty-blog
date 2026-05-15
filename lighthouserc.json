@@ -8,11 +8,24 @@
       ],
       "startServerCommand": "cd site && hugo server -D --port 1414 --bind 127.0.0.1",
       "startServerReadyPattern": "Web Server is available",
-      "numberOfRuns": 1,
+      "numberOfRuns": 3,
       "settings": {
-        "preset": "desktop",
+        "formFactor": "mobile",
+        "throttlingMethod": "simulate",
         "throttling": {
-          "cpuSlowdownMultiplier": 4
+          "rttMs": 150,
+          "throughputKbps": 1638.4,
+          "cpuSlowdownMultiplier": 4,
+          "requestLatencyMs": 0,
+          "downloadThroughputKbps": 0,
+          "uploadThroughputKbps": 0
+        },
+        "screenEmulation": {
+          "mobile": true,
+          "width": 412,
+          "height": 823,
+          "deviceScaleFactor": 1.75,
+          "disabled": false
         }
       }
     },
