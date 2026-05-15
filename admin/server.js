@@ -18,11 +18,30 @@ import postsRoutes from './src/routes/posts.js';
 import mediaRoutes from './src/routes/media.js';
 import publishRoutes from './src/routes/publish.js';
 import healthRoutes from './src/routes/health.js';
+// Phase 4: tiny migration runner — applies any pending DDL in
+// `src/db/migrations/` (auth tables, media table, …) before we serve
+// the first request. Safe to call on every boot; already-applied
+// migrations are tracked in the `schema_migrations` table.
+import { runMigrations } from './src/db/migrate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SITE_DIR = process.env.SITE_DIR || join(__dirname, '..', 'site');
+
+// Run migrations before opening the listener so a fresh install never
+// races a request against partial DDL.
+try {
+  const { applied, skipped } = runMigrations();
+  if (applied.length) {
+    console.log(
+      `  · migrations applied: ${applied.join(', ')} (${skipped.length} already on file)`,
+    );
+  }
+} catch (err) {
+  console.error('Fatal: migrations failed to apply:', err);
+  process.exit(1);
+}
 
 // Trust proxy (behind Caddy/Cloudflare)
 app.set('trust proxy', 1);
@@ -50,6 +69,27 @@ const authLimiter = rateLimit({
 
 // Static files (admin UI)
 app.use(express.static(join(__dirname, 'public')));
+
+// Phase 4: serve uploaded originals straight off the site's static
+// tree. In production these are also baked into Hugo's output by the
+// publish step; the admin process serves them directly so the library
+// UI works the moment a file is uploaded — no `hugo build` round-trip.
+// Mounting `images` and `files` as separate roots so we never expose
+// the rest of `site/static/`.
+app.use(
+  '/images',
+  express.static(join(SITE_DIR, 'static', 'images'), {
+    fallthrough: false,
+    maxAge: '7d',
+  }),
+);
+app.use(
+  '/files',
+  express.static(join(SITE_DIR, 'static', 'files'), {
+    fallthrough: false,
+    maxAge: '7d',
+  }),
+);
 
 // Auth routes (rate limited)
 app.use('/auth', authLimiter, authRoutes);

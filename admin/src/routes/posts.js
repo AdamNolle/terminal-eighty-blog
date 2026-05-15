@@ -2,6 +2,11 @@ import { Router } from 'express';
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs';
 import path, { join } from 'path';
 import { parsePost, serializePost } from '../utils/frontmatter.js';
+// Phase 4: any post write/delete may add or remove `/images/...` or
+// `/files/...` references — invalidate the post-refs cache so the
+// media library's "usage" counts and `?force=true` checks see the
+// new state immediately rather than waiting the 60-second TTL.
+import { invalidatePostRefs } from '../utils/postRefs.js';
 
 const SITE_DIR = process.env.SITE_DIR || join(process.cwd(), '..', 'site');
 const router = Router();
@@ -85,6 +90,7 @@ router.post('/', (req, res) => {
 
     const fileContent = serializePost(data, content || '');
     writeFileSync(join(postsDir, filename), fileContent);
+    invalidatePostRefs();
 
     res.json({ success: true, filename, slug });
   } catch (err) {
@@ -111,6 +117,7 @@ router.put('/:filename', (req, res) => {
     if (oldFilename !== newFilename) {
       unlinkSync(join(postsDir, oldFilename));
     }
+    invalidatePostRefs();
 
     res.json({ success: true, filename: newFilename, slug });
   } catch (err) {
@@ -124,6 +131,7 @@ router.delete('/:filename', (req, res) => {
   try {
     const safeFilename = path.basename(req.params.filename);
     unlinkSync(join(postsDir, safeFilename));
+    invalidatePostRefs();
     res.json({ success: true });
   } catch (err) {
     console.error(err);
