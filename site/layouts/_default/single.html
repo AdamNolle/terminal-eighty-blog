@@ -41,7 +41,30 @@
   <span class="p-author h-card" hidden>{{ site.Params.author | default site.Title }}</span>
 
   <div class="prose e-content">
-    {{ .Content }}
+    {{- /* Phase 3c: transform `:::TYPE ... :::` callout directives into
+           semantic `<aside class="callout callout-TYPE">…</aside>`. Hugo's
+           goldmark doesn't ship a fenced-directive extension as of
+           0.161, so we run a small regex pass over the rendered HTML.
+           The admin editor writes the `:::TYPE` form; this filter is what
+           makes them render the same shape Phase 3c styles on both
+           surfaces. If Hugo ever adds first-class directive parsing,
+           drop this filter and rely on goldmark.
+
+           Phase 13+: KaTeX rendering for `$...$` / `$$...$$` math will
+           also live here (currently the editor renders client-side only;
+           Hugo lets math source pass through unrendered). */ -}}
+    {{- $html := .Content -}}
+    {{- /* Goldmark renders `:::TYPE\n…\n:::` as a single `<p>:::TYPE\n
+           body\n:::</p>` (a paragraph whose lines are bracketed by the
+           directive fences). We match that form and rewrite it into a
+           semantic aside. The label text stays lower-case here; the
+           `.callout-label` CSS rule uppercases it via text-transform.
+
+           Form 1 (paragraph-inline): `<p>:::TYPE\nbody\n:::</p>` */ -}}
+    {{- $html = replaceRE `(?s)<p>:::(info|tip|warn|danger)\s*([\s\S]*?):::\s*</p>` `<aside class="callout callout-$1" role="note"><span class="callout-label">$1</span><div class="callout-body"><p>$2</p></div></aside>` $html -}}
+    {{- /* Form 2 (paragraph-separated): `<p>:::TYPE</p>…<p>:::</p>` */ -}}
+    {{- $html = replaceRE `(?s)<p>:::(info|tip|warn|danger)</p>(.*?)<p>:::</p>` `<aside class="callout callout-$1" role="note"><span class="callout-label">$1</span><div class="callout-body">$2</div></aside>` $html -}}
+    {{ $html | safeHTML }}
   </div>
 
   <div class="end-banner" aria-hidden="true">

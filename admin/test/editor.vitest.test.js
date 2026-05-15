@@ -558,3 +558,252 @@ describe('Phase 3b: save/publish keyboard events', () => {
     expect(pubFired).toBeGreaterThan(0);
   });
 });
+
+// ─── Phase 3c: advanced blocks (tables, math, callouts, footnotes, code) ──
+
+describe('Phase 3c: tables', () => {
+  it('parses a 2×2 GFM table into one thead row + one tbody row', () => {
+    const md = '| A | B |\n| --- | --- |\n| 1 | 2 |';
+    const doc = parseMarkdown(md);
+    // The doc should be a single table block.
+    expect(doc.firstChild.type.name).toBe('table');
+    const table = doc.firstChild;
+    expect(table.childCount).toBe(2);
+    // Row 0: header row with two tableHeader cells.
+    const headerRow = table.child(0);
+    expect(headerRow.type.name).toBe('tableRow');
+    expect(headerRow.childCount).toBe(2);
+    expect(headerRow.child(0).type.name).toBe('tableHeader');
+    expect(headerRow.child(1).type.name).toBe('tableHeader');
+    expect(headerRow.child(0).textContent).toBe('A');
+    expect(headerRow.child(1).textContent).toBe('B');
+    // Row 1: body row with two tableCell cells.
+    const bodyRow = table.child(1);
+    expect(bodyRow.child(0).type.name).toBe('tableCell');
+    expect(bodyRow.child(1).type.name).toBe('tableCell');
+    expect(bodyRow.child(0).textContent).toBe('1');
+    expect(bodyRow.child(1).textContent).toBe('2');
+  });
+
+  it('round-trips a 2×2 GFM table as a fixed point', () => {
+    const md = '| A | B |\n| --- | --- |\n| 1 | 2 |';
+    const once = normalizeMarkdown(md);
+    const twice = normalizeMarkdown(once);
+    expect(twice).toBe(once);
+    expect(once).toContain('| A | B |');
+    expect(once).toMatch(/\| --- \| --- \|/);
+    expect(once).toContain('| 1 | 2 |');
+  });
+
+  it('escapes pipe characters inside cells', () => {
+    const md = '| Pipes        | Other  |\n| ------------ | ------ |\n| a \\| b       | x      |';
+    const once = normalizeMarkdown(md);
+    expect(once).toMatch(/a \\\| b/);
+  });
+});
+
+describe('Phase 3c: math', () => {
+  it('parses inline $x^2$ as a mathInline node', () => {
+    const doc = parseMarkdown('See $x^2$ inline');
+    const para = doc.firstChild;
+    expect(para.type.name).toBe('paragraph');
+    // Walk children: text "See ", mathInline, text " inline"
+    const types = [];
+    para.forEach((child) => types.push(child.type.name));
+    expect(types).toContain('mathInline');
+    let mathNode = null;
+    para.forEach((c) => {
+      if (c.type.name === 'mathInline') mathNode = c;
+    });
+    expect(mathNode.attrs.formula).toBe('x^2');
+  });
+
+  it('parses $$...$$ as a block-level mathBlock', () => {
+    const doc = parseMarkdown('$$\nE = mc^2\n$$');
+    expect(doc.firstChild.type.name).toBe('mathBlock');
+    expect(doc.firstChild.attrs.formula).toBe('E = mc^2');
+  });
+
+  it('round-trips inline + block math as a fixed point', () => {
+    const md = 'Inline $x^2$ here\n\n$$\nE = mc^2\n$$';
+    const once = normalizeMarkdown(md);
+    const twice = normalizeMarkdown(once);
+    expect(twice).toBe(once);
+    expect(once).toContain('$x^2$');
+    expect(once).toContain('$$\nE = mc^2\n$$');
+  });
+});
+
+describe('Phase 3c: callouts', () => {
+  for (const type of ['info', 'tip', 'warn', 'danger']) {
+    it(`round-trips :::${type} as a callout node`, () => {
+      const md = `:::${type}\nHello *world*\n:::`;
+      const doc = parseMarkdown(md);
+      expect(doc.firstChild.type.name).toBe('callout');
+      expect(doc.firstChild.attrs.type).toBe(type);
+      const once = normalizeMarkdown(md);
+      const twice = normalizeMarkdown(once);
+      expect(twice).toBe(once);
+      expect(once.startsWith(`:::${type}`)).toBe(true);
+      expect(once.endsWith(':::')).toBe(true);
+    });
+  }
+});
+
+describe('Phase 3c: footnotes', () => {
+  it('parses [^1] reference + [^1]: definition into ref + block', () => {
+    const md = 'See note[^1]\n\n[^1]: footnote text here';
+    const doc = parseMarkdown(md);
+    // Two top-level children: paragraph + footnoteBlock.
+    expect(doc.childCount).toBe(2);
+    expect(doc.child(0).type.name).toBe('paragraph');
+    expect(doc.child(1).type.name).toBe('footnoteBlock');
+    // The paragraph contains a footnoteRef.
+    const para = doc.child(0);
+    let ref = null;
+    para.forEach((c) => {
+      if (c.type.name === 'footnoteRef') ref = c;
+    });
+    expect(ref).not.toBeNull();
+    expect(ref.attrs.label).toBe('1');
+    // The footnoteBlock contains one footnoteItem with label "1".
+    const block = doc.child(1);
+    expect(block.childCount).toBe(1);
+    expect(block.child(0).type.name).toBe('footnoteItem');
+    expect(block.child(0).attrs.label).toBe('1');
+    expect(block.child(0).textContent).toBe('footnote text here');
+  });
+
+  it('round-trips a footnote as a fixed point', () => {
+    const md = 'See note[^1]\n\n[^1]: footnote text here';
+    const once = normalizeMarkdown(md);
+    const twice = normalizeMarkdown(once);
+    expect(twice).toBe(once);
+    expect(once).toContain('[^1]');
+    expect(once).toContain('[^1]: footnote text here');
+  });
+});
+
+describe('Phase 3c: code block with language fence', () => {
+  it('parses ```js fenced code with language attribute', () => {
+    const doc = parseMarkdown('```js\nconst x = 1;\n```');
+    expect(doc.firstChild.type.name).toBe('codeBlock');
+    expect(doc.firstChild.attrs.language).toBe('js');
+    expect(doc.firstChild.textContent).toBe('const x = 1;');
+  });
+
+  it('round-trips ```ts fenced code as a fixed point', () => {
+    const md = '```typescript\nconst x: number = 1;\n```';
+    const once = normalizeMarkdown(md);
+    const twice = normalizeMarkdown(once);
+    expect(twice).toBe(once);
+    expect(once).toMatch(/^```typescript\n/);
+    expect(once).toMatch(/```$/);
+  });
+
+  it('round-trips fenced code with no language', () => {
+    const md = '```\nplain text here\n```';
+    const once = normalizeMarkdown(md);
+    const twice = normalizeMarkdown(once);
+    expect(twice).toBe(once);
+  });
+});
+
+describe('Phase 3c: editor mount integrations', () => {
+  let mount;
+  let rootEl;
+  let instance;
+
+  beforeAll(async () => {
+    installProseMirrorPolyfills();
+    mount = await loadEntry();
+  });
+
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="r"></div>';
+    rootEl = document.getElementById('r');
+  });
+
+  afterEach(() => {
+    if (instance && typeof instance.destroy === 'function') {
+      try {
+        instance.destroy();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    instance = null;
+    document.body.innerHTML = '';
+  });
+
+  it('mounts with a GFM table and serialises back to GFM', () => {
+    instance = mount(rootEl, '| A | B |\n| --- | --- |\n| 1 | 2 |\n');
+    // The hidden textarea (instance.value) is the round-tripped form.
+    expect(instance.value).toContain('| A | B |');
+    expect(instance.value).toContain('| 1 | 2 |');
+    // TipTap doc should contain a table node.
+    const doc = instance._tiptap.state.doc;
+    let foundTable = false;
+    doc.descendants((n) => {
+      if (n.type.name === 'table') foundTable = true;
+    });
+    expect(foundTable).toBe(true);
+  });
+
+  it('mounts with inline + block math and round-trips through the source mode', () => {
+    const md = 'Inline $x^2$\n\n$$\nE = mc^2\n$$';
+    instance = mount(rootEl, md);
+    const before = instance.value;
+    instance.setMode('source');
+    expect(instance.value).toBe(before);
+    instance.setMode('wysiwyg');
+    expect(instance.value).toBe(before);
+  });
+
+  it('mounts with all four callout types and round-trips', () => {
+    const md = ':::info\nA\n:::\n\n:::tip\nB\n:::\n\n:::warn\nC\n:::\n\n:::danger\nD\n:::';
+    instance = mount(rootEl, md);
+    const out = instance.value;
+    expect(out).toContain(':::info');
+    expect(out).toContain(':::tip');
+    expect(out).toContain(':::warn');
+    expect(out).toContain(':::danger');
+    // Round-trip should be a fixed point.
+    const onceMore = instance.value;
+    instance.setMode('source');
+    instance.setMode('wysiwyg');
+    expect(instance.value).toBe(onceMore);
+  });
+
+  it('mounts with a footnote and round-trips with stable label', () => {
+    const md = 'See note[^1]\n\n[^1]: footnote text here';
+    instance = mount(rootEl, md);
+    expect(instance.value).toContain('[^1]');
+    expect(instance.value).toContain('[^1]: footnote text here');
+  });
+
+  it('mounts with a fenced code block and preserves the language', () => {
+    const md = '```js\nconst x = 1;\n```';
+    instance = mount(rootEl, md);
+    expect(instance.value).toContain('```js');
+    expect(instance.value).toContain('const x = 1;');
+  });
+
+  it('exposes new advanced toolbar buttons + table/code contextual groups', () => {
+    instance = mount(rootEl, '');
+    const tb = rootEl.querySelector('.te-editor-toolbar-rich');
+    // Advanced group (math, callout, footnote).
+    const advBtns = tb.querySelectorAll('.te-tb-group[aria-label="Advanced"] button.te-tb-btn');
+    expect(advBtns.length).toBe(3);
+    // Table group is present but hidden when out of a table.
+    const tableGroup = tb.querySelector('.te-tb-table-group');
+    expect(tableGroup).not.toBeNull();
+    expect(tableGroup.classList.contains('is-hidden')).toBe(true);
+    // Code language group is also present + hidden when out of code.
+    const codeGroup = tb.querySelector('.te-tb-code-group');
+    expect(codeGroup).not.toBeNull();
+    const langSelect = tb.querySelector('select.te-tb-lang');
+    expect(langSelect).not.toBeNull();
+    expect(langSelect.options.length).toBeGreaterThan(10);
+  });
+});

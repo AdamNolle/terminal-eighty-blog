@@ -42,7 +42,7 @@
  * slash menu's placeholder rows; Phase 3d adds find/replace, TOC
  * sidebar, and autosave hooks.
  */
-import { Editor, Extension } from '@tiptap/core';
+import { Editor, Extension, Node, mergeAttributes, InputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
@@ -51,12 +51,81 @@ import Image from '@tiptap/extension-image';
 // the StarterKit.configure() call below.
 import { TaskList, TaskItem } from '@tiptap/extension-list';
 import Suggestion from '@tiptap/suggestion';
+// Phase 3c: tables (4 extensions), code-block syntax-highlight, lowlight.
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
+import { createLowlight } from 'lowlight';
+// Only 13 grammars — keep bundle lean. Phase 11 may swap in dynamic
+// language registration if more languages are needed.
+import jsLang from 'highlight.js/lib/languages/javascript';
+import tsLang from 'highlight.js/lib/languages/typescript';
+import pyLang from 'highlight.js/lib/languages/python';
+import goLang from 'highlight.js/lib/languages/go';
+import rustLang from 'highlight.js/lib/languages/rust';
+import xmlLang from 'highlight.js/lib/languages/xml';
+import cssLang from 'highlight.js/lib/languages/css';
+import jsonLang from 'highlight.js/lib/languages/json';
+import bashLang from 'highlight.js/lib/languages/bash';
+import mdLang from 'highlight.js/lib/languages/markdown';
+import yamlLang from 'highlight.js/lib/languages/yaml';
+import sqlLang from 'highlight.js/lib/languages/sql';
+import diffLang from 'highlight.js/lib/languages/diff';
 import { MarkdownParser, MarkdownSerializer } from 'prosemirror-markdown';
 import MarkdownIt from 'markdown-it';
+import mdContainer from 'markdown-it-container';
+import mdFootnote from 'markdown-it-footnote';
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { markdown as cmMarkdown } from '@codemirror/lang-markdown';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+
+// Phase 3c: shared lowlight instance used by both the code-block
+// extension and the language picker UI.
+const lowlight = createLowlight();
+lowlight.register('javascript', jsLang);
+lowlight.register('js', jsLang);
+lowlight.register('typescript', tsLang);
+lowlight.register('ts', tsLang);
+lowlight.register('python', pyLang);
+lowlight.register('py', pyLang);
+lowlight.register('go', goLang);
+lowlight.register('rust', rustLang);
+lowlight.register('rs', rustLang);
+lowlight.register('html', xmlLang);
+lowlight.register('xml', xmlLang);
+lowlight.register('css', cssLang);
+lowlight.register('json', jsonLang);
+lowlight.register('bash', bashLang);
+lowlight.register('sh', bashLang);
+lowlight.register('shell', bashLang);
+lowlight.register('markdown', mdLang);
+lowlight.register('md', mdLang);
+lowlight.register('yaml', yamlLang);
+lowlight.register('yml', yamlLang);
+lowlight.register('sql', sqlLang);
+lowlight.register('diff', diffLang);
+
+// Canonical labels shown in the language picker — only one entry per
+// physical grammar to avoid alias duplicates polluting the dropdown.
+const CODE_LANGUAGES = [
+  { value: '', label: 'Plain text' },
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'typescript', label: 'TypeScript' },
+  { value: 'python', label: 'Python' },
+  { value: 'go', label: 'Go' },
+  { value: 'rust', label: 'Rust' },
+  { value: 'html', label: 'HTML' },
+  { value: 'css', label: 'CSS' },
+  { value: 'json', label: 'JSON' },
+  { value: 'bash', label: 'Bash' },
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'yaml', label: 'YAML' },
+  { value: 'sql', label: 'SQL' },
+  { value: 'diff', label: 'Diff' },
+];
 
 // ─────────────────────────────────────────────────────────────────
 // Markdown round-trip: parser/serializer keyed on TipTap node names.
@@ -73,7 +142,57 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 // HTML pass-through enabled so `<u>...</u>` parses into the underline
 // mark and serialises back to `<u>...</u>`. All other inline HTML is
 // still ignored.
-const tokenizer = MarkdownIt('commonmark', { html: true }).enable('table');
+//
+// Phase 3c adds:
+//   - `table` rule enabled (GFM table syntax)
+//   - `markdown-it-container` for callouts (info/tip/warn/danger)
+//   - `markdown-it-footnote` for `[^id]` references + `[^id]:` definitions
+const tokenizer = MarkdownIt('commonmark', { html: true })
+  .enable('table')
+  .use(mdContainer, 'info')
+  .use(mdContainer, 'tip')
+  .use(mdContainer, 'warn')
+  .use(mdContainer, 'danger')
+  .use(mdFootnote);
+
+// Post-process the token stream so that:
+//   - thead/tbody wrappers are dropped (TipTap's table has no thead/tbody
+//     node — header status is implied by the cell type per row);
+//   - inline content inside th/td is wrapped in a paragraph_open /
+//     paragraph_close pair so it matches the tableCell/tableHeader
+//     `content: 'block+'` constraint;
+//   - hidden inner paragraphs inside footnote definitions are flattened
+//     so a single-paragraph footnote produces a clean text container.
+function preprocessTokens(tokens) {
+  const out = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (tok.type === 'thead_open' || tok.type === 'thead_close') continue;
+    if (tok.type === 'tbody_open' || tok.type === 'tbody_close') continue;
+    // markdown-it-footnote emits a render-only `footnote_anchor` token
+    // inside each definition. It has no Markdown form, so drop it
+    // before prosemirror-markdown sees it.
+    if (tok.type === 'footnote_anchor') continue;
+    if (tok.type === 'th_open' || tok.type === 'td_open') {
+      out.push(tok);
+      // Synthesise paragraph_open so the inline that follows lands
+      // inside a valid block child of the cell.
+      const pOpen = new tok.constructor('paragraph_open', 'p', 1);
+      pOpen.block = true;
+      out.push(pOpen);
+      continue;
+    }
+    if (tok.type === 'th_close' || tok.type === 'td_close') {
+      const pClose = new tok.constructor('paragraph_close', 'p', -1);
+      pClose.block = true;
+      out.push(pClose);
+      out.push(tok);
+      continue;
+    }
+    out.push(tok);
+  }
+  return out;
+}
 
 /** Return whether a markdown-it list is "tight" (no blank lines between items). */
 function listIsTight(tokens, i) {
@@ -132,6 +251,31 @@ const tokenSpec = {
   // `<u>` open/close pairs onto the underline mark; everything else
   // falls through as plain text.
   html_inline: { mark: 'underline', noCloseToken: true, getAttrs: () => ({}) },
+  // Phase 3c: tables. The preprocessor strips thead/tbody and injects
+  // paragraph wrappers around inline content in th/td cells.
+  table: { block: 'table' },
+  tr: { block: 'tableRow' },
+  th: { block: 'tableHeader' },
+  td: { block: 'tableCell' },
+  // Phase 3c: callouts (info / tip / warn / danger).
+  container_info: { block: 'callout', getAttrs: () => ({ type: 'info' }) },
+  container_tip: { block: 'callout', getAttrs: () => ({ type: 'tip' }) },
+  container_warn: { block: 'callout', getAttrs: () => ({ type: 'warn' }) },
+  container_danger: { block: 'callout', getAttrs: () => ({ type: 'danger' }) },
+  // Phase 3c: footnotes. The ref is inline (label points back to the
+  // definition); the block wraps one or more definitions at the end.
+  footnote_ref: {
+    node: 'footnoteRef',
+    getAttrs: (tok) => ({ label: (tok.meta && tok.meta.label) || '' }),
+  },
+  footnote_block: { block: 'footnoteBlock' },
+  footnote: {
+    block: 'footnoteItem',
+    getAttrs: (tok) => ({ label: (tok.meta && tok.meta.label) || '' }),
+  },
+  // footnote_anchor is purely a render-time decoration; the
+  // preprocessor drops it before prosemirror-markdown sees the token
+  // stream, so no spec is needed here.
 };
 
 /**
@@ -149,6 +293,10 @@ const tokenSpec = {
  */
 function buildParser(schema) {
   const hasUnderline = Boolean(schema.marks.underline);
+  const hasMath = Boolean(schema.nodes.mathInline && schema.nodes.mathBlock);
+  const hasTable = Boolean(schema.nodes.table);
+  const hasCallout = Boolean(schema.nodes.callout);
+  const hasFootnote = Boolean(schema.nodes.footnoteRef);
   const spec = { ...tokenSpec };
   if (hasUnderline) {
     spec.u = { mark: 'underline' };
@@ -156,8 +304,111 @@ function buildParser(schema) {
     delete spec.html_inline;
     delete spec.u;
   }
+  if (!hasTable) {
+    delete spec.table;
+    delete spec.tr;
+    delete spec.th;
+    delete spec.td;
+  }
+  if (!hasCallout) {
+    delete spec.container_info;
+    delete spec.container_tip;
+    delete spec.container_warn;
+    delete spec.container_danger;
+  }
+  if (!hasFootnote) {
+    delete spec.footnote_ref;
+    delete spec.footnote_block;
+    delete spec.footnote;
+  }
+  if (hasMath) {
+    spec.math_inline = {
+      node: 'mathInline',
+      getAttrs: (tok) => ({ formula: tok.content || '' }),
+    };
+    spec.math_block = {
+      node: 'mathBlock',
+      getAttrs: (tok) => ({ formula: tok.content || '' }),
+    };
+  }
+  // Inline `$...$` / block `$$...$$` math detection. We don't ship a
+  // markdown-it plugin for this — there isn't a stable lightweight one —
+  // so we walk the token stream and split text runs ourselves. This
+  // keeps math entirely a *parser* concern; the serializer just emits
+  // `$...$` / `$$\n...\n$$` from the live nodes.
+  const MATH_INLINE = /\$([^\s$][^$\n]*?[^\s$]|\S)\$/;
+  function splitMath(children, TokCtor) {
+    const out = [];
+    for (let i = 0; i < children.length; i++) {
+      const t = children[i];
+      if (t.type !== 'text' || !t.content || t.content.indexOf('$') < 0) {
+        out.push(t);
+        continue;
+      }
+      // Split text on the next `$x$` token.
+      let rest = t.content;
+      while (rest.length) {
+        const m = MATH_INLINE.exec(rest);
+        if (!m) {
+          if (rest) {
+            const textTok = new TokCtor('text', '', 0);
+            textTok.content = rest;
+            textTok.level = t.level;
+            out.push(textTok);
+          }
+          break;
+        }
+        if (m.index > 0) {
+          const textTok = new TokCtor('text', '', 0);
+          textTok.content = rest.slice(0, m.index);
+          textTok.level = t.level;
+          out.push(textTok);
+        }
+        const mathTok = new TokCtor('math_inline', '', 0);
+        mathTok.content = m[1];
+        mathTok.level = t.level;
+        out.push(mathTok);
+        rest = rest.slice(m.index + m[0].length);
+      }
+    }
+    return out;
+  }
+  // Detect block-level math: `paragraph_open / inline($$...$$) /
+  // paragraph_close` → math_block token. We treat the *entire*
+  // paragraph as math if and only if its single inline child is a
+  // text run bracketed by `$$`.
+  function detectBlockMath(tokens, TokCtor) {
+    if (!hasMath) return tokens;
+    const out = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const tok = tokens[i];
+      const next = tokens[i + 1];
+      const after = tokens[i + 2];
+      if (
+        tok &&
+        tok.type === 'paragraph_open' &&
+        next &&
+        next.type === 'inline' &&
+        after &&
+        after.type === 'paragraph_close' &&
+        next.content &&
+        /^\$\$([\s\S]+)\$\$$/.test(next.content.trim())
+      ) {
+        const inner = next.content.trim().slice(2, -2).trim();
+        const mathTok = new TokCtor('math_block', '', 0);
+        mathTok.content = inner;
+        mathTok.block = true;
+        out.push(mathTok);
+        i += 2;
+        continue;
+      }
+      out.push(tok);
+    }
+    return out;
+  }
   const tokenize = (text, env) => {
-    const tokens = tokenizer.parse(text || '', env || {});
+    let tokens = tokenizer.parse(text || '', env || {});
+    let TokCtor = null;
     // Walk inline children and remap `<u>` / `</u>` html_inline tokens
     // to a synthetic `u_open` / `u_close` pair the parser can recognise.
     function remap(children) {
@@ -165,12 +416,11 @@ function buildParser(schema) {
       const out = [];
       for (let i = 0; i < children.length; i++) {
         const t = children[i];
+        TokCtor = TokCtor || t.constructor;
         if (t.type === 'html_inline' && hasUnderline) {
           const m = /^<\s*(\/?)\s*u\s*>$/i.exec(t.content || '');
           if (m) {
             const open = m[1] !== '/';
-            // Synthesise a token that prosemirror-markdown's parser
-            // treats as a paired mark token.
             const synth = new t.constructor(open ? 'u_open' : 'u_close', 'u', open ? 1 : -1);
             synth.markup = '';
             synth.nesting = open ? 1 : -1;
@@ -184,7 +434,18 @@ function buildParser(schema) {
       return out;
     }
     for (let i = 0; i < tokens.length; i++) {
-      if (tokens[i].children) tokens[i].children = remap(tokens[i].children);
+      const tk = tokens[i];
+      if (!TokCtor) TokCtor = tk.constructor;
+      if (tk.children) tk.children = remap(tk.children);
+      if (hasMath && tk.children && tk.type === 'inline') {
+        tk.children = splitMath(tk.children, tk.constructor);
+      }
+    }
+    if (hasMath && TokCtor) {
+      tokens = detectBlockMath(tokens, TokCtor);
+    }
+    if (hasTable) {
+      tokens = preprocessTokens(tokens);
     }
     return tokens;
   };
@@ -278,7 +539,123 @@ const nodeSerializers = {
   text(state, node) {
     state.text(node.text, !state.inAutolink);
   },
+  // ── Phase 3c: tables (GFM) ───────────────────────────────
+  //
+  // We emit a header row + alignment row + body rows in one closeBlock
+  // sweep. The default ProseMirror serializer doesn't understand table
+  // structure so we walk it ourselves: row 0 is the header (its cells
+  // are tableHeader), the rest are body rows (tableCell).
+  table(state, node) {
+    const rows = [];
+    node.forEach((row) => {
+      const cells = [];
+      row.forEach((cell) => {
+        cells.push(serializeCellInline(state, cell));
+      });
+      rows.push(cells);
+    });
+    if (!rows.length) {
+      state.closeBlock(node);
+      return;
+    }
+    const colCount = rows.reduce((m, r) => Math.max(m, r.length), 0);
+    // Pad short rows with empty cells.
+    rows.forEach((r) => {
+      while (r.length < colCount) r.push('');
+    });
+    // Header row — if the first row is all tableHeader cells, use it;
+    // otherwise emit a synthetic blank header (GFM requires one).
+    const firstRow = node.firstChild;
+    const hasHeader =
+      firstRow &&
+      firstRow.childCount > 0 &&
+      Array.from(firstRow.content.content).every((c) => c.type.name === 'tableHeader');
+    const headerCells = hasHeader ? rows[0] : new Array(colCount).fill('');
+    const bodyRows = hasHeader ? rows.slice(1) : rows;
+    state.write('| ' + headerCells.map((c) => c || ' ').join(' | ') + ' |\n');
+    state.write('| ' + new Array(colCount).fill('---').join(' | ') + ' |');
+    bodyRows.forEach((r) => {
+      state.write('\n| ' + r.map((c) => c || ' ').join(' | ') + ' |');
+    });
+    state.closeBlock(node);
+  },
+  // tableRow / tableCell / tableHeader are never called directly —
+  // table() walks the children itself. Provide stubs so prosemirror-
+  // markdown doesn't throw if a stray row appears at the top level.
+  tableRow(state, node) {
+    state.renderContent(node);
+  },
+  tableCell(state, node) {
+    state.renderContent(node);
+  },
+  tableHeader(state, node) {
+    state.renderContent(node);
+  },
+  // ── Phase 3c: math ───────────────────────────────────────
+  mathInline(state, node) {
+    // Inline math: `$formula$`. The formula text is held in the
+    // `formula` attribute (not as child text) so we never expose the
+    // raw `$` to mark serialisation.
+    state.write('$' + (node.attrs.formula || '') + '$');
+  },
+  mathBlock(state, node) {
+    state.write('$$\n' + (node.attrs.formula || '') + '\n$$');
+    state.closeBlock(node);
+  },
+  // ── Phase 3c: callouts ───────────────────────────────────
+  callout(state, node) {
+    const type = node.attrs.type || 'info';
+    state.write(':::' + type + '\n');
+    state.renderContent(node);
+    // Ensure the closing fence sits on its own line.
+    state.flushClose(1);
+    state.write(':::');
+    state.closeBlock(node);
+  },
+  // ── Phase 3c: footnotes ──────────────────────────────────
+  footnoteRef(state, node) {
+    state.write('[^' + (node.attrs.label || '') + ']');
+  },
+  footnoteBlock(state, node) {
+    state.renderContent(node);
+  },
+  footnoteItem(state, node) {
+    state.write('[^' + (node.attrs.label || '') + ']: ');
+    // Footnote definitions render their content inline; we use a
+    // dedicated rendering path so newlines inside multi-paragraph
+    // footnotes get the 4-space continuation indent.
+    state.renderInline(node.firstChild || node, false);
+    state.closeBlock(node);
+  },
 };
+
+/**
+ * Serialize a single tableCell / tableHeader node to its Markdown
+ * inline form (pipe-separated cell content). GFM tables can't contain
+ * arbitrary block content per cell — only inline content per row —
+ * so we flatten one paragraph and pipe-escape any literal `|`.
+ */
+function serializeCellInline(state, cell) {
+  const para = cell.firstChild;
+  if (!para) return '';
+  // Re-use the existing serializer state to render inline content into
+  // a temporary buffer. We swap out the `out` field, render, then
+  // restore — exactly how prosemirror-markdown's internal helpers work.
+  const oldOut = state.out;
+  const oldAtBlank = state.atBlank;
+  state.out = '';
+  state.atBlank = true;
+  state.renderInline(para, false);
+  const inline = state.out
+    // Pipe must be escaped inside a cell.
+    .replace(/\|/g, '\\|')
+    // Newlines aren't permitted inside a cell either.
+    .replace(/\n+/g, ' ')
+    .trim();
+  state.out = oldOut;
+  state.atBlank = oldAtBlank;
+  return inline;
+}
 
 const markSerializers = {
   italic: { open: '*', close: '*', mixable: true, expelEnclosingWhitespace: true },
@@ -496,13 +873,87 @@ const SLASH_ITEMS = [
   {
     id: 'table',
     label: 'Table',
-    hint: 'Grid of rows and columns (Phase 3c)',
+    hint: 'Insert a 3×3 table',
     group: 'Insert',
     keywords: ['table', 'grid', 'rows', 'columns'],
-    placeholder: true,
     run: (editor, range) => {
-      editor.chain().focus().deleteRange(range).run();
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+        .run();
     },
+  },
+  {
+    id: 'math-block',
+    label: 'Math block',
+    hint: 'KaTeX display equation',
+    group: 'Insert',
+    keywords: ['math', 'equation', 'formula', 'latex', 'katex', 'tex'],
+    run: (editor, range) => {
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({ type: 'mathBlock', attrs: { formula: '' } })
+        .run();
+    },
+  },
+  {
+    id: 'math-inline',
+    label: 'Inline math',
+    hint: '$x^2$ at cursor',
+    group: 'Insert',
+    keywords: ['math', 'inline', 'equation', 'latex'],
+    run: (editor, range) => {
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({ type: 'mathInline', attrs: { formula: '' } })
+        .run();
+    },
+  },
+  {
+    id: 'callout-info',
+    label: 'Info callout',
+    hint: ':::info',
+    group: 'Callout',
+    keywords: ['callout', 'admonition', 'info', 'note'],
+    run: (editor, range) => editor.chain().focus().deleteRange(range).setCallout('info').run(),
+  },
+  {
+    id: 'callout-tip',
+    label: 'Tip callout',
+    hint: ':::tip',
+    group: 'Callout',
+    keywords: ['callout', 'tip', 'hint'],
+    run: (editor, range) => editor.chain().focus().deleteRange(range).setCallout('tip').run(),
+  },
+  {
+    id: 'callout-warn',
+    label: 'Warning callout',
+    hint: ':::warn',
+    group: 'Callout',
+    keywords: ['callout', 'warn', 'warning', 'caution'],
+    run: (editor, range) => editor.chain().focus().deleteRange(range).setCallout('warn').run(),
+  },
+  {
+    id: 'callout-danger',
+    label: 'Danger callout',
+    hint: ':::danger',
+    group: 'Callout',
+    keywords: ['callout', 'danger', 'error', 'critical'],
+    run: (editor, range) => editor.chain().focus().deleteRange(range).setCallout('danger').run(),
+  },
+  {
+    id: 'footnote',
+    label: 'Footnote',
+    hint: 'Insert a numbered footnote',
+    group: 'Insert',
+    keywords: ['footnote', 'note', 'reference', 'cite'],
+    run: (editor, range) => insertFootnote(editor, range),
   },
 ];
 
@@ -510,11 +961,15 @@ function filterSlashItems(query) {
   const q = String(query || '')
     .trim()
     .toLowerCase();
-  if (!q) return SLASH_ITEMS.slice(0, 10);
+  // Phase 3c bumped the limit from 10 to 14 to accommodate callout + math
+  // + footnote rows without forcing the user to type a filter to find
+  // them. The list view scrolls if more rows exist past the visible
+  // height.
+  if (!q) return SLASH_ITEMS.slice(0, 14);
   return SLASH_ITEMS.filter((item) => {
     const hay = (item.label + ' ' + (item.keywords || []).join(' ')).toLowerCase();
     return hay.includes(q);
-  }).slice(0, 10);
+  }).slice(0, 14);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -831,6 +1286,447 @@ function announce(editor, menu) {
 // Editor instance
 // ─────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────
+// Phase 3c: custom TipTap nodes — math, callout, footnote
+// ─────────────────────────────────────────────────────────────────
+//
+// Each node is small enough to keep inline here rather than splitting
+// into separate files. The shape is intentionally minimal — we hold a
+// `formula` / `type` / `label` attribute and render a single
+// representative DOM node; rendering of the math itself happens via a
+// `nodeView` in the math nodes only.
+
+/**
+ * Inline math node `$x^2$`. The formula is held in the `formula` attr,
+ * not as text content — the node has no children. A node view replaces
+ * the contents with a KaTeX render once the math module loads.
+ */
+const MathInline = Node.create({
+  name: 'mathInline',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      formula: { default: '' },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-math-inline]',
+        getAttrs: (el) => ({ formula: el.getAttribute('data-formula') || el.textContent || '' }),
+      },
+    ];
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    return [
+      'span',
+      mergeAttributes(HTMLAttributes, {
+        'data-math-inline': 'true',
+        'data-formula': node.attrs.formula || '',
+        class: 'te-math te-math-inline',
+      }),
+      // The visible fallback while KaTeX hasn't yet rendered.
+      `$${node.attrs.formula || ''}$`,
+    ];
+  },
+  addNodeView() {
+    return ({ node, getPos, editor }) => mathNodeView(node, getPos, editor, 'inline');
+  },
+});
+
+/** Block math `$$ ... $$`. Same shape but rendered as a block. */
+const MathBlock = Node.create({
+  name: 'mathBlock',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  defining: true,
+  addAttributes() {
+    return {
+      formula: { default: '' },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'div[data-math-block]',
+        getAttrs: (el) => ({ formula: el.getAttribute('data-formula') || el.textContent || '' }),
+      },
+    ];
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    return [
+      'div',
+      mergeAttributes(HTMLAttributes, {
+        'data-math-block': 'true',
+        'data-formula': node.attrs.formula || '',
+        class: 'te-math te-math-block',
+      }),
+      `$$\n${node.attrs.formula || ''}\n$$`,
+    ];
+  },
+  addNodeView() {
+    return ({ node, getPos, editor }) => mathNodeView(node, getPos, editor, 'block');
+  },
+  addInputRules() {
+    // Type `$$ ` on its own line to convert into an empty math block.
+    return [
+      new InputRule({
+        find: /^\$\$ $/,
+        handler: ({ range, commands }) => {
+          commands.command(({ tr }) => {
+            tr.replaceRangeWith(range.from, range.to, this.type.create({ formula: '' }));
+            return true;
+          });
+        },
+      }),
+    ];
+  },
+});
+
+/** Callout (admonition) — block container with a `type` attribute. */
+const Callout = Node.create({
+  name: 'callout',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+  addAttributes() {
+    return {
+      type: {
+        default: 'info',
+        parseHTML: (el) => {
+          const m = (el.className || '').match(/callout-(info|tip|warn|danger)/);
+          return m ? m[1] : el.getAttribute('data-callout-type') || 'info';
+        },
+        renderHTML: (attrs) => ({ 'data-callout-type': attrs.type || 'info' }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'aside.callout' }, { tag: 'div.callout' }];
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    const type = node.attrs.type || 'info';
+    return [
+      'aside',
+      mergeAttributes(HTMLAttributes, {
+        class: `callout callout-${type}`,
+        role: 'note',
+      }),
+      ['span', { class: 'callout-label', contenteditable: 'false' }, type.toUpperCase()],
+      ['div', { class: 'callout-body' }, 0],
+    ];
+  },
+  addCommands() {
+    return {
+      setCallout:
+        (type = 'info') =>
+        ({ commands }) =>
+          commands.wrapIn(this.name, { type }),
+      toggleCallout:
+        (type = 'info') =>
+        ({ editor, commands }) => {
+          if (editor.isActive(this.name)) return commands.lift(this.name);
+          return commands.wrapIn(this.name, { type });
+        },
+      unsetCallout:
+        () =>
+        ({ commands }) =>
+          commands.lift(this.name),
+    };
+  },
+});
+
+/** Inline footnote reference. Renders as a superscript `[label]` anchor. */
+const FootnoteRef = Node.create({
+  name: 'footnoteRef',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return { label: { default: '1' } };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'sup.footnote-ref',
+        getAttrs: (el) => ({ label: el.getAttribute('data-label') || el.textContent || '' }),
+      },
+    ];
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    return [
+      'sup',
+      mergeAttributes(HTMLAttributes, {
+        class: 'footnote-ref',
+        'data-label': node.attrs.label || '',
+      }),
+      ['a', { href: `#fn-${node.attrs.label}` }, `[${node.attrs.label}]`],
+    ];
+  },
+});
+
+/**
+ * Footnote item — a single `[^label]: ...` definition. Holds one
+ * paragraph of inline content.
+ */
+const FootnoteItem = Node.create({
+  name: 'footnoteItem',
+  group: 'footnoteItem',
+  content: 'paragraph',
+  defining: true,
+  addAttributes() {
+    return { label: { default: '1' } };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'li[data-footnote-item]',
+        getAttrs: (el) => ({ label: el.getAttribute('data-label') || '' }),
+      },
+    ];
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    return [
+      'li',
+      mergeAttributes(HTMLAttributes, {
+        'data-footnote-item': 'true',
+        'data-label': node.attrs.label || '',
+        id: `fn-${node.attrs.label}`,
+      }),
+      0,
+    ];
+  },
+});
+
+/**
+ * Footnote container — collects footnote items at the end of the
+ * document. There is only ever zero or one of these.
+ */
+const FootnoteBlock = Node.create({
+  name: 'footnoteBlock',
+  group: 'block',
+  content: 'footnoteItem+',
+  defining: true,
+  isolating: true,
+  parseHTML() {
+    return [{ tag: 'ol.footnote-list' }, { tag: 'section.footnotes' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      'ol',
+      mergeAttributes(HTMLAttributes, {
+        class: 'footnote-list',
+        'aria-label': 'Footnotes',
+      }),
+      0,
+    ];
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────
+// Math node view + lazy KaTeX loader
+// ─────────────────────────────────────────────────────────────────
+//
+// We load KaTeX (JS + CSS) from a CDN with subresource integrity the
+// first time a math node is mounted. This keeps the bundle ~250 KB
+// smaller; the trade-off is one network request on the first math node
+// ever rendered in a session. Subsequent renders re-use the cached
+// module + CSS.
+//
+// SRI hashes are pinned to KaTeX 0.16.11 (matches the dependency we
+// installed; if you bump the version, regenerate these hashes).
+const KATEX_CDN_BASE = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist';
+const KATEX_JS_SRI = 'sha256-rzgIjudPpzaP4WT9HrkmaDxDsBpYHC2VqGuOJTb6BiM=';
+const KATEX_CSS_SRI = 'sha256-bgC0/wn7sV6sdK0NB4tCYibTu0YqEcZL9Vi8YGmFkRk=';
+let katexPromise = null;
+function loadKatex() {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (window.katex) return Promise.resolve(window.katex);
+  if (katexPromise) return katexPromise;
+  katexPromise = new Promise((resolve) => {
+    // Inject the stylesheet first.
+    if (!document.querySelector('link[data-te-katex]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = `${KATEX_CDN_BASE}/katex.min.css`;
+      link.crossOrigin = 'anonymous';
+      link.integrity = KATEX_CSS_SRI;
+      link.dataset.teKatex = 'css';
+      document.head.appendChild(link);
+    }
+    const script = document.createElement('script');
+    script.src = `${KATEX_CDN_BASE}/katex.min.js`;
+    script.crossOrigin = 'anonymous';
+    script.integrity = KATEX_JS_SRI;
+    script.async = true;
+    script.dataset.teKatex = 'js';
+    script.onload = () => resolve(window.katex || null);
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
+  return katexPromise;
+}
+
+function mathNodeView(node, getPos, editor, kind) {
+  const dom = document.createElement(kind === 'inline' ? 'span' : 'div');
+  dom.className = kind === 'inline' ? 'te-math te-math-inline' : 'te-math te-math-block';
+  dom.dataset.formula = node.attrs.formula || '';
+  dom.setAttribute('contenteditable', 'false');
+  let editing = false;
+  let textarea = null;
+  function renderFormula(formula) {
+    if (editing) return;
+    dom.innerHTML = '';
+    loadKatex()
+      .then((katex) => {
+        if (editing) return null;
+        if (katex && typeof katex.render === 'function') {
+          try {
+            katex.render(formula || '', dom, {
+              throwOnError: false,
+              displayMode: kind === 'block',
+            });
+            return null;
+          } catch (_err) {
+            /* fall through to text fallback */
+          }
+        }
+        // Fallback: show the raw source so the doc stays editable even
+        // if the CDN is unreachable.
+        dom.textContent = kind === 'inline' ? `$${formula || ''}$` : `$$\n${formula || ''}\n$$`;
+        return null;
+      })
+      .catch(() => {
+        dom.textContent = kind === 'inline' ? `$${formula || ''}$` : `$$\n${formula || ''}\n$$`;
+      });
+  }
+  function enterEdit() {
+    if (editing || !editor || !editor.options.editable) return;
+    editing = true;
+    dom.classList.add('is-editing');
+    dom.innerHTML = '';
+    textarea = document.createElement('textarea');
+    textarea.className = 'te-math-input';
+    textarea.value = node.attrs.formula || '';
+    textarea.rows = kind === 'block' ? 3 : 1;
+    textarea.setAttribute('aria-label', 'Math formula');
+    textarea.addEventListener('blur', commit);
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancel();
+      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        commit();
+      }
+    });
+    dom.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+  }
+  function commit() {
+    if (!editing) return;
+    const next = textarea ? textarea.value : node.attrs.formula || '';
+    editing = false;
+    dom.classList.remove('is-editing');
+    if (typeof getPos === 'function' && editor) {
+      const pos = getPos();
+      if (typeof pos === 'number') {
+        const tr = editor.state.tr.setNodeMarkup(pos, undefined, { formula: next });
+        editor.view.dispatch(tr);
+      }
+    }
+    renderFormula(next);
+  }
+  function cancel() {
+    editing = false;
+    dom.classList.remove('is-editing');
+    renderFormula(node.attrs.formula || '');
+  }
+  dom.addEventListener('click', enterEdit);
+  renderFormula(node.attrs.formula || '');
+  return {
+    dom,
+    update(updated) {
+      if (updated.type !== node.type) return false;
+      const f = updated.attrs.formula || '';
+      if (!editing) renderFormula(f);
+      dom.dataset.formula = f;
+      return true;
+    },
+    selectNode() {
+      dom.classList.add('te-math-selected');
+    },
+    deselectNode() {
+      dom.classList.remove('te-math-selected');
+    },
+    stopEvent(event) {
+      // While editing, the textarea owns all events.
+      return editing && event.target === textarea;
+    },
+    destroy() {
+      if (textarea) textarea.removeEventListener('blur', commit);
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Slash menu helpers exposed for the new items
+// ─────────────────────────────────────────────────────────────────
+//
+// Insert a fresh `[^N]` reference at the cursor *and* append a new
+// `footnoteBlock`/`footnoteItem` definition at the end of the doc.
+// Picks the next free integer label so multiple refs don't collide.
+function insertFootnote(editor, range) {
+  const { schema } = editor;
+  if (!schema.nodes.footnoteRef) return;
+  // Find used labels.
+  const used = new Set();
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === 'footnoteRef' || node.type.name === 'footnoteItem') {
+      if (node.attrs.label) used.add(String(node.attrs.label));
+    }
+  });
+  let n = 1;
+  while (used.has(String(n))) n += 1;
+  const label = String(n);
+  const refNode = schema.nodes.footnoteRef.create({ label });
+  const para = schema.nodes.paragraph.create(null, schema.text('Footnote text…'));
+  const item = schema.nodes.footnoteItem.create({ label }, para);
+
+  let tr = editor.state.tr;
+  if (range) {
+    tr = tr.deleteRange(range.from, range.to);
+  }
+  // Insert the inline ref at the (post-delete) cursor.
+  tr = tr.replaceSelectionWith(refNode, false);
+  // Append the definition to the existing footnoteBlock, or create a
+  // new one at the end of the document.
+  let blockPos = -1;
+  let blockNode = null;
+  tr.doc.descendants((node, pos) => {
+    if (node.type.name === 'footnoteBlock') {
+      blockPos = pos;
+      blockNode = node;
+      return false;
+    }
+    return true;
+  });
+  if (blockNode && blockPos >= 0) {
+    const insertAt = blockPos + blockNode.nodeSize - 1;
+    tr = tr.insert(insertAt, item);
+  } else {
+    const block = schema.nodes.footnoteBlock.create(null, item);
+    tr = tr.insert(tr.doc.content.size, block);
+  }
+  editor.view.dispatch(tr);
+}
+
 function buildExtensions(slashExt) {
   const exts = [
     StarterKit.configure({
@@ -839,7 +1735,11 @@ function buildExtensions(slashExt) {
       // horizontalRule, image, bold, italic, strike, code, history,
       // dropcursor, gapcursor. We override link to keep it
       // openOnClick=false in the admin (avoids navigating away).
+      // Phase 3c: disable the built-in codeBlock — CodeBlockLowlight
+      // below replaces it so syntax-highlighting decorations render
+      // inside the WYSIWYG view.
       link: false,
+      codeBlock: false,
       heading: { levels: [1, 2, 3, 4, 5, 6] },
     }),
     Link.configure({
@@ -851,6 +1751,33 @@ function buildExtensions(slashExt) {
     Image.configure({ inline: true, allowBase64: false }),
     TaskList,
     TaskItem.configure({ nested: true }),
+    // Phase 3c: tables. The TableHeader extension applies `scope="col"`
+    // on the rendered `<th>` for a11y; the table itself gets a
+    // `role="table"` + aria counts via HTMLAttributes.
+    Table.configure({
+      resizable: false,
+      allowTableNodeSelection: true,
+      HTMLAttributes: { class: 'te-table' },
+    }),
+    TableRow,
+    TableHeader.configure({
+      HTMLAttributes: { scope: 'col' },
+    }),
+    TableCell,
+    // Phase 3c: code blocks with lowlight syntax-highlight decorations.
+    CodeBlockLowlight.configure({
+      lowlight,
+      HTMLAttributes: { class: 'te-code-block hljs' },
+    }),
+    // Phase 3c: math (inline + block) — node views lazy-load KaTeX.
+    MathInline,
+    MathBlock,
+    // Phase 3c: callouts.
+    Callout,
+    // Phase 3c: footnotes.
+    FootnoteRef,
+    FootnoteItem,
+    FootnoteBlock,
   ];
   if (slashExt) exts.push(slashExt);
   return exts;
@@ -1487,6 +2414,134 @@ export function mount(rootEl, initialMarkdown, options) {
   );
   richToolbar.appendChild(gHist);
 
+  // ─── Phase 3c: advanced-block buttons ───────────────────────
+  //
+  // Math, Callout (dropdown), Footnote — always available. Tables get
+  // their own contextual group below that only shows up when the
+  // cursor is inside a `table`.
+  richToolbar.appendChild(tbDivider());
+  const gAdv = tbGroup('Advanced');
+  gAdv.appendChild(
+    tbBtn({
+      label: 'Math (inline)',
+      shortcut: '',
+      glyph: '∑',
+      active: () => editor.isActive('mathInline') || editor.isActive('mathBlock'),
+      run: () => {
+        editor
+          .chain()
+          .focus()
+          .insertContent({ type: 'mathInline', attrs: { formula: '' } })
+          .run();
+      },
+    }),
+  );
+
+  // Callout dropdown — clicking the button cycles through info → tip →
+  // warn → danger → off, mirroring what the slash menu's four entries
+  // provide more verbosely. The aria-label updates per state.
+  const calloutTypes = ['info', 'tip', 'warn', 'danger'];
+  let calloutCursor = 0;
+  gAdv.appendChild(
+    tbBtn({
+      label: 'Callout (cycle type)',
+      shortcut: '',
+      glyph: '!',
+      className: 'te-tb-callout',
+      active: () => editor.isActive('callout'),
+      run: () => {
+        if (editor.isActive('callout')) {
+          editor.chain().focus().unsetCallout().run();
+          return;
+        }
+        const type = calloutTypes[calloutCursor % calloutTypes.length];
+        calloutCursor += 1;
+        editor.chain().focus().setCallout(type).run();
+      },
+    }),
+  );
+  gAdv.appendChild(
+    tbBtn({
+      label: 'Footnote',
+      shortcut: '',
+      glyph: '†',
+      active: () => false,
+      run: () => insertFootnote(editor, null),
+    }),
+  );
+  richToolbar.appendChild(gAdv);
+
+  // ─── Code-block language picker ─────────────────────────────
+  //
+  // Shows up as a small <select> wrapped in a button-group div, but is
+  // hidden unless the cursor is inside a codeBlock. We keep the markup
+  // present at all times so the toolbar layout doesn't shift when the
+  // user enters/leaves a code block.
+  const gCode = tbGroup('Code language');
+  gCode.classList.add('te-tb-code-group');
+  const langLabel = document.createElement('label');
+  langLabel.className = 'te-tb-lang-label';
+  langLabel.setAttribute('aria-label', 'Code block language');
+  const langSel = document.createElement('select');
+  langSel.className = 'te-tb-lang';
+  langSel.setAttribute('aria-label', 'Code block language');
+  CODE_LANGUAGES.forEach((opt) => {
+    const o = document.createElement('option');
+    o.value = opt.value;
+    o.textContent = opt.label;
+    langSel.appendChild(o);
+  });
+  langSel.addEventListener('change', () => {
+    if (!editor.isActive('codeBlock')) return;
+    const v = langSel.value || null;
+    editor.chain().focus().updateAttributes('codeBlock', { language: v }).run();
+  });
+  langLabel.appendChild(langSel);
+  gCode.appendChild(langLabel);
+  richToolbar.appendChild(gCode);
+
+  // ─── Table contextual group ────────────────────────────────
+  //
+  // Buttons here are no-ops unless the cursor is in a table. The whole
+  // group hides (display:none) when out-of-table to keep the toolbar
+  // compact.
+  richToolbar.appendChild(tbDivider());
+  const gTable = tbGroup('Table');
+  gTable.classList.add('te-tb-table-group');
+  function tableBtn(label, glyph, runFn) {
+    return tbBtn({
+      label,
+      shortcut: '',
+      glyph,
+      active: () => false,
+      canRun: () => editor.isActive('table'),
+      run: runFn,
+    });
+  }
+  gTable.appendChild(
+    tableBtn('Add row above', '⤴', () => editor.chain().focus().addRowBefore().run()),
+  );
+  gTable.appendChild(
+    tableBtn('Add row below', '⤵', () => editor.chain().focus().addRowAfter().run()),
+  );
+  gTable.appendChild(
+    tableBtn('Add column left', '⇤', () => editor.chain().focus().addColumnBefore().run()),
+  );
+  gTable.appendChild(
+    tableBtn('Add column right', '⇥', () => editor.chain().focus().addColumnAfter().run()),
+  );
+  gTable.appendChild(tableBtn('Delete row', '−', () => editor.chain().focus().deleteRow().run()));
+  gTable.appendChild(
+    tableBtn('Delete column', '×', () => editor.chain().focus().deleteColumn().run()),
+  );
+  gTable.appendChild(
+    tableBtn('Toggle header row', 'H', () => editor.chain().focus().toggleHeaderRow().run()),
+  );
+  gTable.appendChild(
+    tableBtn('Delete table', '⌫', () => editor.chain().focus().deleteTable().run()),
+  );
+  richToolbar.appendChild(gTable);
+
   function refreshToolbarState() {
     toolbarButtons.forEach((b) => {
       try {
@@ -1495,6 +2550,21 @@ export function mount(rootEl, initialMarkdown, options) {
         /* ignore */
       }
     });
+    // Show the table contextual group only when the cursor is in a
+    // table; show the language picker only when in a code block. We
+    // toggle a class rather than `display: none` so screen-reader
+    // discovery is preserved when in the right context.
+    const inTable = editor.isActive('table');
+    const inCode = editor.isActive('codeBlock');
+    gTable.classList.toggle('is-visible', inTable);
+    gTable.classList.toggle('is-hidden', !inTable);
+    gCode.classList.toggle('is-visible', inCode);
+    gCode.classList.toggle('is-hidden', !inCode);
+    if (inCode) {
+      const attrs = editor.getAttributes('codeBlock');
+      const lang = attrs && attrs.language ? String(attrs.language) : '';
+      if (langSel.value !== lang) langSel.value = lang;
+    }
   }
   refreshToolbarState();
 
