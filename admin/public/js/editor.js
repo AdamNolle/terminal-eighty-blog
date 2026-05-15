@@ -325,13 +325,39 @@
     [btnPub, btnPub2].forEach((b) => b && b.addEventListener('click', publishSite));
     if (btnDel) btnDel.addEventListener('click', deletePost);
 
-    // Keyboard: Cmd/Ctrl + S
+    // Keyboard: Cmd/Ctrl + S (fired from anywhere outside the editor).
+    // Inside the editor, TipTap's keymap intercepts these first and
+    // dispatches the matching `editor-save` / `editor-publish` custom
+    // events on #editor-root — see below.
     document.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         savePost();
       }
     });
+
+    // Phase 3b: the editor bundle's keymap dispatches custom events for
+    // Cmd+S and Cmd+Enter so the page can route them through its
+    // existing save / publish flow without coupling the bundle to the
+    // page. The events bubble from #editor-root; we listen at the root
+    // element to capture them regardless of focus location inside.
+    if (editorRoot) {
+      editorRoot.addEventListener('editor-save', (e) => {
+        e.preventDefault?.();
+        savePost();
+      });
+      editorRoot.addEventListener('editor-publish', (e) => {
+        e.preventDefault?.();
+        publishSite();
+      });
+      // The slash menu's "Image" placeholder dispatches this so we can
+      // open the existing sidebar uploader's file picker (Phase 4 will
+      // replace with a proper media browser).
+      editorRoot.addEventListener('te-slash-image', () => {
+        const input = document.getElementById('ed-file-input');
+        if (input && typeof input.click === 'function') input.click();
+      });
+    }
 
     // Media uploader inside the editor sidebar (Phase 4 will overhaul)
     if (window.TE && TE.media) {

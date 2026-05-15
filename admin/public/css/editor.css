@@ -608,3 +608,295 @@
     font-size: 30px;
   }
 }
+
+/* ============================================================
+   Phase 3b: rich toolbar, slash menu, link dialog
+   ============================================================ */
+
+/* Rich toolbar — sits between the mode toggle group and the
+   flex spacer, so it stays left-aligned while the mode toggle
+   floats right. Buttons are grouped with thin dividers. */
+.te-editor-toolbar-rich {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.te-editor-toolbar-rich.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.te-tb-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+.te-tb-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--glass-border);
+  margin: 0 6px;
+  display: inline-block;
+}
+
+/* Toolbar buttons themselves. Square-ish, monospace, glyph-only at
+   typical sizes; the visible glyph is decorative and aria-hidden so
+   only the aria-label is announced. */
+.te-tb-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 120ms,
+    color 120ms,
+    border-color 120ms;
+}
+.te-tb-btn:hover {
+  background: var(--glass-tint);
+  color: var(--fg);
+}
+.te-tb-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.te-tb-btn.is-active,
+.te-tb-btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.te-tb-btn[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.te-tb-btn.te-tb-bold .te-tb-glyph {
+  font-weight: 700;
+  font-family: var(--serif);
+}
+.te-tb-btn.te-tb-italic .te-tb-glyph {
+  font-style: italic;
+  font-family: var(--serif);
+}
+.te-tb-btn.te-tb-underline .te-tb-glyph {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-family: var(--serif);
+}
+.te-tb-btn.te-tb-strike .te-tb-glyph {
+  text-decoration: line-through;
+  font-family: var(--serif);
+}
+.te-tb-btn.is-placeholder {
+  opacity: 0.7;
+}
+.te-tb-glyph {
+  pointer-events: none;
+  user-select: none;
+  letter-spacing: 0;
+}
+
+/* Underline mark inside the WYSIWYG body. */
+.ProseMirror u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ─── Slash menu ──────────────────────────────────────────────
+   Floating absolutely-positioned listbox. Sized so 6-7 rows fit
+   comfortably; longer menus scroll. */
+.te-slash-menu {
+  position: absolute;
+  z-index: 300;
+  min-width: 240px;
+  max-width: 320px;
+  background: var(--bg, var(--glass-tint));
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  box-shadow: var(--glass-shadow, 0 4px 20px rgba(0, 0, 0, 0.18));
+  padding: 4px;
+  font-family: var(--sans);
+  max-height: 320px;
+  overflow: auto;
+  /* Solid background so the floating list reads over the editor.
+     Use the deepest glass surface available for theme parity. */
+  background-color: var(--bg-deep, var(--bg, #fff));
+}
+.te-slash-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.te-slash-group {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  padding: 8px 8px 4px;
+  user-select: none;
+}
+.te-slash-item {
+  appearance: none;
+  display: flex;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.te-slash-item .te-slash-label {
+  flex: 0 0 auto;
+  font-weight: 500;
+}
+.te-slash-item .te-slash-hint {
+  flex: 1 1 auto;
+  font-size: 11.5px;
+  color: var(--fg-mute);
+  text-align: right;
+}
+.te-slash-item.is-active,
+.te-slash-item:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.te-slash-item.is-active .te-slash-hint,
+.te-slash-item:hover .te-slash-hint {
+  color: color-mix(in srgb, var(--accent) 70%, var(--fg-mute));
+}
+.te-slash-item.is-placeholder {
+  opacity: 0.55;
+  font-style: italic;
+}
+.te-slash-empty {
+  padding: 12px 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--fg-mute);
+}
+
+/* ─── Link dialog ─────────────────────────────────────────────
+   Centered modal with a focus trap. The trap, Esc-close, and
+   restored-focus are wired in editor.entry.js — the CSS here is
+   purely presentational. */
+.te-link-dialog {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+  padding: 20px;
+}
+.te-link-dialog[hidden] {
+  display: none;
+}
+.te-link-card {
+  background: var(--bg, var(--glass-tint));
+  background-color: var(--bg-deep, var(--bg, #fff));
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  box-shadow: var(--glass-shadow, 0 12px 40px rgba(0, 0, 0, 0.32));
+  padding: 18px 18px 14px;
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.te-link-card h3 {
+  margin: 0 0 4px;
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--fg);
+}
+.te-link-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.te-link-field label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+}
+.te-link-field input {
+  appearance: none;
+  background: var(--glass-tint);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 7px 9px;
+  outline: none;
+}
+.te-link-field input:focus {
+  border-color: var(--accent);
+}
+.te-link-error {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--danger, #c00);
+}
+.te-link-foot {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  justify-content: flex-end;
+  align-items: center;
+}
+.te-link-foot button {
+  appearance: none;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 7px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.te-link-foot button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.te-link-foot button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.te-link-foot .te-link-ok {
+  background: var(--accent);
+  color: var(--bg, #fff);
+  border-color: var(--accent);
+}
+.te-link-foot .te-link-ok:hover {
+  filter: brightness(1.1);
+  color: var(--bg, #fff);
+}
+.te-link-foot .te-link-remove[hidden] {
+  display: none;
+}

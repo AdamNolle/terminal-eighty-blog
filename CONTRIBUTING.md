@@ -140,6 +140,78 @@ Short, declarative, no period. Match the existing log: `Phase 1.5: lint, test, a
 
 If a rule turns out noisier than useful, downgrade rather than disable globally.
 
+## Editor shortcuts
+
+The admin post editor (`/editor`) is a dual-mode TipTap + CodeMirror surface.
+All of the shortcuts below are bound through TipTap's keymap (in WYSIWYG
+mode) and CodeMirror's keymap (in Source mode). `Mod` means `Cmd` on
+macOS / iPadOS and `Ctrl` everywhere else.
+
+### Inline marks
+
+| Shortcut      | Action                      |
+| ------------- | --------------------------- |
+| `Mod+B`       | Bold                        |
+| `Mod+I`       | Italic                      |
+| `Mod+Shift+U` | Underline                   |
+| `Mod+Shift+X` | Strikethrough               |
+| `Mod+E`       | Inline code                 |
+| `Mod+K`       | Insert / edit link (dialog) |
+
+### Block type
+
+| Shortcut      | Action     |
+| ------------- | ---------- |
+| `Mod+Alt+1`   | Heading 1  |
+| `Mod+Alt+2`   | Heading 2  |
+| `Mod+Alt+3`   | Heading 3  |
+| `Mod+Alt+0`   | Paragraph  |
+| `Mod+Shift+B` | Blockquote |
+
+### Lists
+
+| Shortcut      | Action                   |
+| ------------- | ------------------------ |
+| `Mod+Shift+8` | Bullet list              |
+| `Mod+Shift+7` | Ordered list             |
+| `Mod+Shift+9` | Task list                |
+| `Tab`         | Indent (sink list item)  |
+| `Shift+Tab`   | Outdent (lift list item) |
+
+### Insert
+
+| Shortcut      | Action                         |
+| ------------- | ------------------------------ |
+| `Mod+Shift+H` | Horizontal rule                |
+| `/`           | Open slash menu (block picker) |
+
+The slash menu, opened by typing `/` inside the editor, offers headings
+H1–H3, bullet/ordered/task lists, blockquote, code block, divider, and
+placeholder rows for image, file, embed, and table (Phases 4 / 6 / 7 / 3c
+wire each one). Navigate with `ArrowUp` / `ArrowDown`, insert with
+`Enter`, dismiss with `Escape`.
+
+### History + actions
+
+| Shortcut      | Action                   |
+| ------------- | ------------------------ |
+| `Mod+Z`       | Undo                     |
+| `Mod+Shift+Z` | Redo                     |
+| `Mod+S`       | Save the post            |
+| `Mod+Enter`   | Save and trigger publish |
+
+`Mod+S` and `Mod+Enter` are intercepted by the editor's keymap and
+dispatched as `editor-save` / `editor-publish` custom events on
+`#editor-root`. `admin/public/js/editor.js` listens for both and routes
+them through its existing `savePost()` / `publishSite()` flow.
+
+### Mode toggle
+
+The editor toolbar's rightmost group toggles between **Rich** (WYSIWYG)
+and **Markdown** (Source / CodeMirror) modes. Markdown round-trips
+through the same parser/serializer pair the server uses, so switching
+modes is a fixed point after the first normalisation pass.
+
 ## Known quirks
 
 - **macOS dev + better-sqlite3**: the prebuilt binary in `admin/node_modules/`
