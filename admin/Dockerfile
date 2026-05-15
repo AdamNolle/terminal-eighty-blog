@@ -1,7 +1,17 @@
 FROM node:20-alpine
 
-# Install git, procps, and build tools needed for better-sqlite3 on Alpine ARM64
-RUN apk add --no-cache git procps python3 make g++
+# System packages:
+#   git, procps        — runtime for publish + monitoring
+#   python3, make, g++ — better-sqlite3 native build on Alpine ARM64
+#   vips, vips-tools,
+#   vips-dev           — libvips runtime + headers for sharp (Phase 5 image pipeline)
+#   libheif, libheif-tools
+#                      — HEIC/HEIF decode support (Phase 5 image handler)
+# sharp ships prebuilts for musl-arm64, but bundling vips/libheif keeps
+# the fallback build path working and provides the heif decoder libvips
+# dlopens at runtime.
+RUN apk add --no-cache git procps python3 make g++ \
+    vips vips-tools vips-dev libheif libheif-tools
 
 WORKDIR /app
 
