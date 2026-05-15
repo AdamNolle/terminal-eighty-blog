@@ -81,6 +81,27 @@ import { EditorState } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { markdown as cmMarkdown } from '@codemirror/lang-markdown';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+// Phase 3d: CodeMirror search facets/commands for the source-mode side
+// of the find/replace modal. We don't render CM's built-in search panel —
+// our modal drives the search/replace state via `setSearchQuery` and the
+// `findNext`/`replaceNext`/`replaceAll` commands.
+import {
+  SearchQuery,
+  setSearchQuery,
+  findNext as cmFindNext,
+  findPrevious as cmFindPrev,
+  replaceNext as cmReplaceNext,
+  replaceAll as cmReplaceAll,
+  search as cmSearch,
+} from '@codemirror/search';
+// Phase 3d: ProseMirror plugin for the WYSIWYG side of find/replace —
+// imported as a peer dep through @tiptap/pm. TextSelection is also used
+// by the TOC sidebar's gotoHeading.
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { Decoration as PMDecoration, DecorationSet as PMDecorationSet } from '@tiptap/pm/view';
+// Phase 3d: drag handle (block reorder). The extension renders a single
+// floating handle anchored on hover over the nearest top-level block.
+import GlobalDragHandle from 'tiptap-extension-global-drag-handle';
 
 // Phase 3c: shared lowlight instance used by both the code-block
 // extension and the language picker UI.
@@ -1778,9 +1799,692 @@ function buildExtensions(slashExt) {
     FootnoteRef,
     FootnoteItem,
     FootnoteBlock,
+    // Phase 3d: drag-handle for block reorder. A floating handle shows
+    // on hover over the nearest top-level block; drag to reorder.
+    // Configured to leave a 24px gutter on the left of each block so the
+    // handle sits in the margin (the CSS in editor.css positions it).
+    GlobalDragHandle.configure({
+      dragHandleWidth: 22,
+      scrollTreshold: 100,
+    }),
+    // Phase 3d: find/replace decoration plugin. The actual UI lives in
+    // createFindReplaceModal() — this extension just makes the plugin
+    // available so transactions can carry our decorations metadata.
+    Extension.create({
+      name: 'teFindReplace',
+      addProseMirrorPlugins() {
+        return [buildFindPlugin()];
+      },
+      addKeyboardShortcuts() {
+        return {
+          // Alt+Shift+ArrowUp/Down: move the current top-level block.
+          // We expose these as the keyboard alternative to drag-and-drop
+          // (per the Phase 3d a11y spec). Falls back gracefully if no
+          // top-level block is selected.
+          'Alt-Shift-ArrowUp': () => moveBlock(this.editor, -1),
+          'Alt-Shift-ArrowDown': () => moveBlock(this.editor, 1),
+        };
+      },
+    }),
   ];
   if (slashExt) exts.push(slashExt);
   return exts;
+}
+
+/**
+ * Phase 3d: move the top-level block containing the current selection up
+ * or down. Returns true on success so TipTap's keymap stops the event.
+ */
+function moveBlock(editor, dir) {
+  if (!editor || !editor.state) return false;
+  const { state, view } = editor;
+  const { selection, doc, tr } = state;
+  // Find the top-level node index containing the selection.
+  const $from = selection.$from;
+  // The topmost node ancestor whose parent is the doc.
+  if ($from.depth < 1) return false;
+  const topIndex = $from.index(0);
+  if (dir < 0 && topIndex === 0) return false;
+  if (dir > 0 && topIndex >= doc.childCount - 1) return false;
+  const a = doc.child(topIndex);
+  const b = doc.child(topIndex + dir);
+  // Compute the absolute offsets for the two blocks at the top level.
+  let posA = 0;
+  for (let i = 0; i < topIndex; i++) posA += doc.child(i).nodeSize;
+  const posB = dir > 0 ? posA + a.nodeSize : posA - b.nodeSize;
+  const aSize = a.nodeSize;
+  const bSize = b.nodeSize;
+  const nextTr = tr;
+  if (dir > 0) {
+    // Replace [posA, posA+aSize+bSize] with b then a.
+    nextTr.replaceWith(posA, posA + aSize + bSize, [b, a]);
+  } else {
+    // dir < 0: posB ends at posA. Replace [posB, posA+aSize] with a then b.
+    nextTr.replaceWith(posB, posA + aSize, [a, b]);
+  }
+  // Keep the selection inside the moved block.
+  const newSelPos = dir > 0 ? posA + bSize + 1 : posB + 1;
+  try {
+    const $newPos = nextTr.doc.resolve(Math.min(newSelPos, nextTr.doc.content.size));
+    nextTr.setSelection(TextSelection.near($newPos));
+  } catch (_) {
+    /* ignore selection placement errors */
+  }
+  view.dispatch(nextTr);
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Phase 3d: Find & Replace
+// ─────────────────────────────────────────────────────────────────
+//
+// A pinned modal toolbar at the top of the editor pane (not browser
+// native find). Two surfaces:
+//
+//   - WYSIWYG mode: ProseMirror decoration plugin tags every match with
+//     the `te-find-match` class and the *current* match with
+//     `te-find-match-active`. We walk `state.doc.descendants` for every
+//     text node and run the query (literal or regex) against the
+//     plain-text content.
+//
+//   - Source mode: we drive CodeMirror's built-in `@codemirror/search`
+//     facet by dispatching `setSearchQuery` on each input change. The
+//     CM6 search commands (`findNext`, `replaceNext`, `replaceAll`) own
+//     the heavy lifting; we only need to relay match counts back to the
+//     status display.
+
+const FIND_PLUGIN_KEY = new PluginKey('teFindReplace');
+
+/** Build the ProseMirror plugin that decorates find-matches in the doc. */
+function buildFindPlugin() {
+  return new Plugin({
+    key: FIND_PLUGIN_KEY,
+    state: {
+      init() {
+        return {
+          query: '',
+          caseSensitive: false,
+          wholeWord: false,
+          regex: false,
+          activeIndex: 0,
+          matches: [],
+          decorations: PMDecorationSet.empty,
+        };
+      },
+      apply(tr, prev) {
+        const meta = tr.getMeta(FIND_PLUGIN_KEY);
+        // If a find-update is being signalled (e.g., after typing in the
+        // query box), the caller stuffs the full next-state into the meta.
+        if (meta) {
+          // Map decorations through the transaction so they survive
+          // intervening edits without re-scanning.
+          const mapped = prev.decorations.map(tr.mapping, tr.doc);
+          return { ...prev, ...meta, decorations: meta.decorations || mapped };
+        }
+        if (tr.docChanged && prev.matches.length) {
+          // The doc changed under us; clear matches — caller can re-run.
+          return {
+            ...prev,
+            matches: [],
+            decorations: PMDecorationSet.empty,
+            activeIndex: 0,
+          };
+        }
+        return prev;
+      },
+    },
+    props: {
+      decorations(state) {
+        return this.getState(state).decorations;
+      },
+    },
+  });
+}
+
+/**
+ * Escape a literal query into a regex source. We always go through a
+ * RegExp so case-sensitive / whole-word / regex options can be combined.
+ */
+function buildFindRegex(query, opts) {
+  if (!query) return null;
+  let src;
+  if (opts.regex) {
+    src = query;
+  } else {
+    src = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  if (opts.wholeWord) {
+    // Wrap in non-capturing word boundaries. Caller still gets a single
+    // capture group via the outer `()` if they need it.
+    src = `\\b(?:${src})\\b`;
+  }
+  const flags = opts.caseSensitive ? 'g' : 'gi';
+  try {
+    return new RegExp(src, flags);
+  } catch (_err) {
+    return null;
+  }
+}
+
+/** Scan the doc for matches; return {from, to} for each hit. */
+function scanProseMirrorMatches(doc, query, opts) {
+  const re = buildFindRegex(query, opts);
+  if (!re) return [];
+  const matches = [];
+  doc.descendants((node, pos) => {
+    if (!node.isText) return;
+    const text = node.text || '';
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text))) {
+      if (m[0] === '') {
+        re.lastIndex += 1;
+        continue;
+      }
+      const from = pos + m.index;
+      const to = from + m[0].length;
+      matches.push({ from, to });
+      if (matches.length > 10000) return false;
+    }
+  });
+  return matches;
+}
+
+function buildFindDecorations(doc, matches, activeIndex) {
+  if (!matches.length) return PMDecorationSet.empty;
+  const decos = matches.map((m, i) =>
+    PMDecoration.inline(m.from, m.to, {
+      class: i === activeIndex ? 'te-find-match te-find-match-active' : 'te-find-match',
+    }),
+  );
+  return PMDecorationSet.create(doc, decos);
+}
+
+/**
+ * Build the find/replace modal DOM, expose handlers that wire it to the
+ * given editor instance and CodeMirror getter. The modal is appended
+ * inside the editor root so it scrolls with the pane.
+ */
+function createFindReplaceModal(rootEl, editor, getCM, getMode) {
+  const modal = document.createElement('div');
+  modal.className = 'te-find-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'false');
+  modal.setAttribute('aria-label', 'Find and replace');
+  modal.hidden = true;
+  modal.innerHTML =
+    '<div class="te-find-row te-find-row-q">' +
+    '<input class="te-find-input" id="te-find-q" type="text" placeholder="Find" aria-label="Find" autocomplete="off" spellcheck="false" />' +
+    '<span class="te-find-count" id="te-find-count" aria-live="polite" aria-atomic="true">0 of 0</span>' +
+    '<button type="button" class="te-find-btn" data-act="prev" aria-label="Previous match" title="Previous (Shift+Enter)">▲</button>' +
+    '<button type="button" class="te-find-btn" data-act="next" aria-label="Next match" title="Next (Enter)">▼</button>' +
+    '<button type="button" class="te-find-btn te-find-close" data-act="close" aria-label="Close find" title="Close (Esc)">×</button>' +
+    '</div>' +
+    '<div class="te-find-row te-find-row-r">' +
+    '<input class="te-find-input" id="te-find-r" type="text" placeholder="Replace" aria-label="Replace" autocomplete="off" spellcheck="false" />' +
+    '<button type="button" class="te-find-btn" data-act="replace" title="Replace (Alt+Enter)">Replace</button>' +
+    '<button type="button" class="te-find-btn" data-act="replaceAll" title="Replace all">All</button>' +
+    '</div>' +
+    '<div class="te-find-row te-find-row-opts">' +
+    '<label class="te-find-opt"><input type="checkbox" id="te-find-cs" /> <span>Aa</span></label>' +
+    '<label class="te-find-opt"><input type="checkbox" id="te-find-ww" /> <span>W</span></label>' +
+    '<label class="te-find-opt"><input type="checkbox" id="te-find-re" /> <span>.*</span></label>' +
+    '<span class="te-find-err" id="te-find-err" role="alert" hidden></span>' +
+    '</div>';
+  rootEl.appendChild(modal);
+
+  const qInput = modal.querySelector('#te-find-q');
+  const rInput = modal.querySelector('#te-find-r');
+  const countEl = modal.querySelector('#te-find-count');
+  const errEl = modal.querySelector('#te-find-err');
+  const cs = modal.querySelector('#te-find-cs');
+  const ww = modal.querySelector('#te-find-ww');
+  const re = modal.querySelector('#te-find-re');
+
+  const state = {
+    matches: [],
+    activeIndex: 0,
+    prevFocus: null,
+  };
+
+  function readOpts() {
+    return {
+      caseSensitive: cs.checked,
+      wholeWord: ww.checked,
+      regex: re.checked,
+    };
+  }
+
+  function setError(msg) {
+    if (!msg) {
+      errEl.hidden = true;
+      errEl.textContent = '';
+      qInput.removeAttribute('aria-invalid');
+      return;
+    }
+    errEl.textContent = msg;
+    errEl.hidden = false;
+    qInput.setAttribute('aria-invalid', 'true');
+  }
+
+  function renderCount() {
+    const n = state.matches.length;
+    countEl.textContent = n ? `${state.activeIndex + 1} of ${n}` : '0 of 0';
+  }
+
+  function applyDecorations() {
+    if (getMode() !== 'wysiwyg') return;
+    const view = editor.view;
+    const tr = view.state.tr.setMeta(FIND_PLUGIN_KEY, {
+      matches: state.matches,
+      activeIndex: state.activeIndex,
+      decorations: buildFindDecorations(view.state.doc, state.matches, state.activeIndex),
+    });
+    view.dispatch(tr);
+  }
+
+  function clearDecorations() {
+    if (!editor || !editor.view) return;
+    const tr = editor.view.state.tr.setMeta(FIND_PLUGIN_KEY, {
+      matches: [],
+      activeIndex: 0,
+      decorations: PMDecorationSet.empty,
+    });
+    editor.view.dispatch(tr);
+  }
+
+  function refresh() {
+    const query = qInput.value || '';
+    const opts = readOpts();
+    setError('');
+    if (!query) {
+      state.matches = [];
+      state.activeIndex = 0;
+      applyDecorations();
+      renderCount();
+      // Also clear the CM query.
+      const cm = getCM();
+      if (cm) cm.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: '' })) });
+      return;
+    }
+    if (opts.regex) {
+      try {
+        new RegExp(query); // validation
+      } catch (err) {
+        setError('Invalid regex: ' + (err && err.message ? err.message : 'unknown'));
+        state.matches = [];
+        renderCount();
+        applyDecorations();
+        return;
+      }
+    }
+    // WYSIWYG mode: scan the live doc for decorations + counter.
+    state.matches = scanProseMirrorMatches(editor.state.doc, query, opts);
+    if (state.activeIndex >= state.matches.length) state.activeIndex = 0;
+    applyDecorations();
+    renderCount();
+    // Source mode: hand the query to CodeMirror.
+    const cm = getCM();
+    if (cm) {
+      const sq = new SearchQuery({
+        search: query,
+        caseSensitive: opts.caseSensitive,
+        wholeWord: opts.wholeWord,
+        regexp: opts.regex,
+        replace: rInput.value || '',
+      });
+      cm.dispatch({ effects: setSearchQuery.of(sq) });
+    }
+  }
+
+  function goto(delta) {
+    if (getMode() === 'source') {
+      const cm = getCM();
+      if (!cm) return;
+      if (delta > 0) cmFindNext(cm);
+      else cmFindPrev(cm);
+      return;
+    }
+    if (!state.matches.length) return;
+    state.activeIndex = (state.activeIndex + delta + state.matches.length) % state.matches.length;
+    applyDecorations();
+    renderCount();
+    // Scroll into view.
+    try {
+      const m = state.matches[state.activeIndex];
+      const dom = editor.view.domAtPos(m.from);
+      if (dom && dom.node && dom.node.parentElement) {
+        dom.node.parentElement.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function replaceCurrent() {
+    if (getMode() === 'source') {
+      const cm = getCM();
+      if (!cm) return;
+      cmReplaceNext(cm);
+      return;
+    }
+    if (!state.matches.length) return;
+    const m = state.matches[state.activeIndex];
+    if (!m) return;
+    const replacement = rInput.value || '';
+    const tr = editor.view.state.tr.insertText(replacement, m.from, m.to);
+    editor.view.dispatch(tr);
+    // Re-scan after a microtask so doc state is settled.
+    queueMicrotask(refresh);
+  }
+
+  function replaceAll() {
+    if (getMode() === 'source') {
+      const cm = getCM();
+      if (!cm) return;
+      cmReplaceAll(cm);
+      return;
+    }
+    if (!state.matches.length) return;
+    const replacement = rInput.value || '';
+    let tr = editor.view.state.tr;
+    // Apply in reverse so earlier offsets stay valid.
+    for (let i = state.matches.length - 1; i >= 0; i--) {
+      const m = state.matches[i];
+      tr = tr.insertText(replacement, m.from, m.to);
+    }
+    editor.view.dispatch(tr);
+    queueMicrotask(refresh);
+  }
+
+  function open() {
+    modal.hidden = false;
+    modal.classList.add('is-open');
+    state.prevFocus = document.activeElement;
+    // Pre-populate from current selection (if any).
+    try {
+      const { from, to, empty } = editor.state.selection;
+      if (!empty) {
+        const sel = editor.state.doc.textBetween(from, to, ' ');
+        if (sel && sel.length < 200) qInput.value = sel;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    queueMicrotask(() => {
+      qInput.focus();
+      qInput.select();
+      refresh();
+    });
+  }
+
+  function close() {
+    modal.classList.remove('is-open');
+    modal.hidden = true;
+    clearDecorations();
+    if (state.prevFocus && typeof state.prevFocus.focus === 'function') {
+      try {
+        state.prevFocus.focus();
+      } catch (_) {
+        /* ignore */
+      }
+    } else if (editor && editor.commands && editor.commands.focus) {
+      try {
+        editor.commands.focus();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+  }
+
+  function toggle() {
+    if (modal.hidden) open();
+    else close();
+  }
+
+  // Wire input events.
+  qInput.addEventListener('input', refresh);
+  rInput.addEventListener('input', refresh);
+  cs.addEventListener('change', refresh);
+  ww.addEventListener('change', refresh);
+  re.addEventListener('change', refresh);
+
+  modal.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const act = btn.getAttribute('data-act');
+    if (act === 'next') goto(1);
+    else if (act === 'prev') goto(-1);
+    else if (act === 'replace') replaceCurrent();
+    else if (act === 'replaceAll') replaceAll();
+    else if (act === 'close') close();
+  });
+
+  modal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (e.altKey) {
+        e.preventDefault();
+        replaceCurrent();
+        return;
+      }
+      e.preventDefault();
+      goto(e.shiftKey ? -1 : 1);
+      return;
+    }
+    if (e.key === 'Tab') {
+      const focusables = Array.from(
+        modal.querySelectorAll('input, button, [tabindex]:not([tabindex="-1"])'),
+      ).filter((n) => !n.disabled && !n.hidden && n.offsetParent !== null);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  });
+
+  return {
+    element: modal,
+    open,
+    close,
+    toggle,
+    refresh,
+    isOpen: () => !modal.hidden,
+    _state: state,
+    _qInput: qInput,
+    _rInput: rInput,
+    _countEl: countEl,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Phase 3d: TOC sidebar
+// ─────────────────────────────────────────────────────────────────
+//
+// Walks the TipTap doc for every heading node, builds a `<nav>` of
+// indented anchor links, and scrolls the matching block into view +
+// moves the selection on click. Subscribed to the editor's `transaction`
+// event with a 100ms trailing throttle so big edits don't thrash.
+
+function buildTocController(editor, tocContainer, tocEmpty) {
+  if (!tocContainer) return null;
+
+  const state = {
+    nodes: [], // [{level, text, pos, id}]
+    activeId: null,
+    timer: null,
+    scheduled: false,
+  };
+
+  function slugify(s, used) {
+    const base =
+      String(s || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '')
+        .slice(0, 64) || 'section';
+    let id = base;
+    let n = 1;
+    while (used.has(id)) {
+      n += 1;
+      id = base + '-' + n;
+    }
+    used.add(id);
+    return id;
+  }
+
+  function scan() {
+    if (!editor || !editor.state) return;
+    const used = new Set();
+    const list = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'heading') {
+        const text = node.textContent.trim();
+        list.push({
+          level: node.attrs.level || 1,
+          text: text || '(Untitled section)',
+          pos,
+          id: slugify(text || 'section-' + (list.length + 1), used),
+        });
+      }
+    });
+    state.nodes = list;
+    render();
+  }
+
+  function render() {
+    if (!tocContainer) return;
+    if (!state.nodes.length) {
+      tocContainer.innerHTML = '';
+      if (tocEmpty) {
+        tocContainer.appendChild(tocEmpty);
+        tocEmpty.hidden = false;
+      }
+      return;
+    }
+    if (tocEmpty) tocEmpty.hidden = true;
+    const frag = document.createDocumentFragment();
+    const list = document.createElement('ol');
+    list.className = 'ed-toc-list';
+    list.setAttribute('role', 'list');
+    state.nodes.forEach((h, idx) => {
+      const li = document.createElement('li');
+      li.className = 'ed-toc-item ed-toc-level-' + h.level;
+      li.dataset.level = String(h.level);
+      const a = document.createElement('a');
+      a.className = 'ed-toc-link';
+      a.href = '#' + h.id;
+      a.textContent = h.text;
+      a.dataset.idx = String(idx);
+      a.dataset.pos = String(h.pos);
+      a.dataset.id = h.id;
+      if (h.id === state.activeId) {
+        a.setAttribute('aria-current', 'location');
+        a.classList.add('is-current');
+      }
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        gotoHeading(idx);
+      });
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+    frag.appendChild(list);
+    tocContainer.innerHTML = '';
+    tocContainer.appendChild(frag);
+  }
+
+  function gotoHeading(idx) {
+    const h = state.nodes[idx];
+    if (!h) return;
+    if (!editor || !editor.view) return;
+    const view = editor.view;
+    try {
+      // Move the selection into the heading then scroll into view.
+      // TextSelection.near is the safe way to land a cursor inside a
+      // heading; it stays resilient even when the heading is empty.
+      const $pos = view.state.doc.resolve(Math.min(h.pos + 1, view.state.doc.content.size));
+      const sel = TextSelection.near($pos);
+      const tr = view.state.tr.setSelection(sel);
+      view.dispatch(tr);
+    } catch (_err) {
+      // Fallback: use editor command API.
+      try {
+        editor.commands.setTextSelection(h.pos + 1);
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    state.activeId = h.id;
+    render();
+    try {
+      const dom = view.domAtPos(h.pos + 1);
+      const el = dom && dom.node && (dom.node.nodeType === 1 ? dom.node : dom.node.parentElement);
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      editor.commands.focus();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function setActiveFromSelection() {
+    if (!editor || !editor.state) return;
+    const { from } = editor.state.selection;
+    let current = null;
+    for (let i = 0; i < state.nodes.length; i++) {
+      if (state.nodes[i].pos <= from) current = state.nodes[i];
+      else break;
+    }
+    const nextId = current ? current.id : null;
+    if (nextId !== state.activeId) {
+      state.activeId = nextId;
+      render();
+    }
+  }
+
+  function schedule() {
+    if (state.scheduled) return;
+    state.scheduled = true;
+    state.timer = setTimeout(() => {
+      state.scheduled = false;
+      state.timer = null;
+      scan();
+    }, 100);
+  }
+
+  function destroy() {
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = null;
+  }
+
+  // Initial render.
+  scan();
+
+  return {
+    schedule,
+    rescan: scan,
+    setActiveFromSelection,
+    destroy,
+    getNodes: () => state.nodes.slice(),
+    gotoHeading,
+  };
 }
 
 /**
@@ -1885,6 +2589,14 @@ export function mount(rootEl, initialMarkdown, options) {
           return true;
         },
         'Mod-Shift-u': () => this.editor.chain().focus().toggleUnderline().run(),
+        // Phase 3d: Cmd+F opens the in-editor find modal. The handler is
+        // hooked to the rootEl find-modal instance further down; we
+        // dispatch the same custom event so source-mode and WYSIWYG share
+        // a single open path.
+        'Mod-f': () => {
+          rootEl.dispatchEvent(new CustomEvent('editor-find', { bubbles: true }));
+          return true;
+        },
       };
     },
   });
@@ -1945,6 +2657,8 @@ export function mount(rootEl, initialMarkdown, options) {
         }),
         // Source-mode shortcuts mirror the rich-mode keymap so users
         // get consistent Save/Publish behaviour regardless of mode.
+        // Phase 3d adds Cmd+F to open the editor's find modal (we route
+        // through the same DOM event the rich mode uses).
         keymap.of([
           {
             key: 'Mod-s',
@@ -1960,7 +2674,19 @@ export function mount(rootEl, initialMarkdown, options) {
               return true;
             },
           },
+          {
+            key: 'Mod-f',
+            run: () => {
+              rootEl.dispatchEvent(new CustomEvent('editor-find', { bubbles: true }));
+              return true;
+            },
+          },
         ]),
+        // Phase 3d: enable @codemirror/search so our modal can drive
+        // findNext / replaceNext / replaceAll. We pass `top: false`
+        // because we render our own UI; CM's built-in panel never
+        // appears.
+        cmSearch({ top: false }),
         EditorView.theme(
           {
             '&': { height: '100%', fontSize: '14px' },
@@ -2823,11 +3549,72 @@ export function mount(rootEl, initialMarkdown, options) {
   suppressInput = false;
   refreshToolbarState();
 
+  // ── Phase 3d: find & replace modal ───────────────────────
+  //
+  // The modal lives inside the editor root so it scrolls with the pane.
+  // Cmd+F (Mod+F) opens it — both when the editor has focus and when
+  // any element inside the editor root has focus. We hijack the event
+  // before the browser opens its native find.
+  const findModal = createFindReplaceModal(
+    rootEl,
+    editor,
+    () => cmView,
+    () => mode,
+  );
+
+  // Cmd+F shortcut for both modes. TipTap-style keymap covers WYSIWYG;
+  // CodeMirror keymap (defined further down) covers source mode; the
+  // root-level keydown handles either while focus is on the toolbar.
+  function isModF(e) {
+    return (e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F');
+  }
+  rootEl.addEventListener('keydown', (e) => {
+    if (!isModF(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    findModal.toggle();
+  });
+  // CodeMirror's keymap dispatches a custom editor-find event when
+  // source-mode users hit Cmd+F — pick it up and open the same modal.
+  rootEl.addEventListener('editor-find', (e) => {
+    e.preventDefault?.();
+    findModal.open();
+  });
+
+  // ── Phase 3d: TOC sidebar ─────────────────────────────────
+  //
+  // The page mounts the TOC container before calling mount(); we look
+  // it up by id and wire updates here. If the host page doesn't render
+  // a container, this is a silent no-op.
+  const tocContainer = document.getElementById('ed-toc-body');
+  const tocEmpty = document.getElementById('ed-toc-empty');
+  const toc = tocContainer ? buildTocController(editor, tocContainer, tocEmpty) : null;
+  if (toc) {
+    editor.on('transaction', () => {
+      // Schedule a throttled re-scan — heading nodes might have been
+      // added/removed/edited, so the TOC structure could be stale.
+      toc.schedule();
+    });
+    editor.on('selectionUpdate', () => {
+      toc.setActiveFromSelection();
+    });
+  }
+
+  // ── Phase 3d: drag-handle keyboard-only mode ──────────────
+  //
+  // Already wired via the teFindReplace extension's addKeyboardShortcuts
+  // — `Alt+Shift+ArrowUp/Down` moves the current top-level block.
+
   // Expose the underlying editors for Phase 3b/c/d hooks. Treat these
   // as semi-private: prefer the façade API where possible.
   instance._tiptap = editor;
   instance._getCM = () => cmView;
   instance._hidden = hidden;
+  instance._findModal = findModal;
+  instance._toc = toc;
+  instance.openFind = () => findModal.open();
+  instance.closeFind = () => findModal.close();
+  instance.getToc = () => (toc ? toc.getNodes() : []);
 
   return instance;
 }

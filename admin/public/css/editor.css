@@ -6,7 +6,10 @@
 
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  /* Phase 3d: 3-column track (main · aux for TOC/SEO · frontmatter).
+     When both aux panels close the column collapses — see the Phase 3d
+     block at the end of this file for the override. */
+  grid-template-columns: minmax(0, 1fr) 260px 340px;
   gap: 16px;
   align-items: stretch;
   min-height: calc(100vh - 130px);
@@ -411,21 +414,8 @@
   background: color-mix(in srgb, var(--accent) 20%, transparent) !important;
 }
 
-.editor-foot {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--glass-border);
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--fg-mute);
-}
-.editor-foot-r {
-  margin-left: auto;
-  display: flex;
-  gap: 8px;
-}
+/* `.editor-foot` styles live in the Phase 3d block at the end of this
+   file; this comment is a breadcrumb for grep-ers who land here first. */
 
 /* Right-side panels (frontmatter / SEO / media / publish) */
 .ed-side {
@@ -1186,4 +1176,529 @@
   position: absolute;
   left: -24px;
   top: 1px;
+}
+
+/* ============================================================
+   Phase 3d: productivity layer
+   Find/replace, TOC sidebar, status bar, autosave pip,
+   SEO preview, drag-handle.
+   ============================================================ */
+
+/* ─── Layout: TOC + SEO aux column ──────────────────────────── */
+/*
+   Phase 3d adds a thin aux column between the editor pane and the
+   frontmatter sidebar. The aux column hosts the TOC sidebar and the
+   SEO preview snippet, each in its own collapsible panel. Both
+   panels persist their open/closed state to localStorage; the column
+   is fully removed from the grid track when both are closed.
+
+   The 3-column track is set on `.editor-layout` near the top of this
+   file; the override below collapses to 2 columns when both panels
+   are closed.
+*/
+.editor-layout[data-toc-open="false"][data-seo-open="false"] {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+.editor-layout[data-toc-open="false"][data-seo-open="false"] .ed-aux {
+  display: none;
+}
+@media (max-width: 1180px) {
+  .editor-layout,
+  .editor-layout[data-toc-open="false"][data-seo-open="false"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ed-aux,
+  .ed-side {
+    display: none;
+  }
+}
+
+.ed-aux {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.ed-aux[hidden] {
+  display: none;
+}
+
+.ed-aux-panel {
+  background: var(--glass-tint);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ed-aux-panel[hidden] {
+  display: none;
+}
+.ed-aux-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  border-bottom: 1px solid var(--glass-border);
+}
+.ed-aux-head > span:first-child {
+  flex: 1;
+}
+.ed-aux-close {
+  background: transparent;
+  border: 0;
+  color: var(--fg-mute);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.ed-aux-close:hover,
+.ed-aux-close:focus-visible {
+  color: var(--fg);
+  background: var(--glass-highlight);
+  outline: 0;
+}
+.ed-aux-empty {
+  margin: 14px;
+  color: var(--fg-mute);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ─── TOC sidebar ──────────────────────────────────────────── */
+.ed-toc-body {
+  padding: 6px 6px 12px;
+  overflow-y: auto;
+  max-height: calc(100vh - 240px);
+}
+.ed-toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ed-toc-item {
+  margin: 0;
+}
+.ed-toc-link {
+  display: block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: var(--fg-dim);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.35;
+  word-break: break-word;
+  border-left: 2px solid transparent;
+}
+.ed-toc-link:hover,
+.ed-toc-link:focus-visible {
+  background: var(--glass-highlight);
+  color: var(--fg);
+  outline: 0;
+}
+.ed-toc-link.is-current {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+.ed-toc-item.ed-toc-level-1 .ed-toc-link {
+  padding-left: 10px;
+  font-weight: 600;
+  color: var(--fg);
+  font-size: 13.5px;
+}
+.ed-toc-item.ed-toc-level-2 .ed-toc-link {
+  padding-left: 22px;
+}
+.ed-toc-item.ed-toc-level-3 .ed-toc-link {
+  padding-left: 34px;
+}
+.ed-toc-item.ed-toc-level-4 .ed-toc-link {
+  padding-left: 46px;
+}
+.ed-toc-item.ed-toc-level-5 .ed-toc-link {
+  padding-left: 58px;
+  font-size: 12px;
+}
+.ed-toc-item.ed-toc-level-6 .ed-toc-link {
+  padding-left: 70px;
+  font-size: 12px;
+}
+
+/* ─── SEO preview ───────────────────────────────────────────── */
+.ed-seo-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.serp-card {
+  background: var(--fg-on-accent, #fff);
+  color: #202124;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-family: arial, sans-serif;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+:root[data-theme="dark"] .serp-card {
+  background: #2c2c2c;
+  color: #dadce0;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+.serp-url {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: #5f6368;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+:root[data-theme="dark"] .serp-url {
+  color: #9aa0a6;
+}
+.serp-url-sep {
+  opacity: 0.6;
+}
+.serp-title {
+  color: #1a0dab;
+  font-size: 18px;
+  line-height: 1.3;
+  margin-bottom: 3px;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  word-break: break-word;
+}
+:root[data-theme="dark"] .serp-title {
+  color: #8ab4f8;
+}
+.serp-desc {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #4d5156;
+  word-break: break-word;
+}
+:root[data-theme="dark"] .serp-desc {
+  color: #bdc1c6;
+}
+.ed-seo-meta {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ed-seo-meta li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.ed-seo-bar {
+  grid-column: 1 / -1;
+  display: block;
+  height: 4px;
+  background: var(--glass-highlight);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.ed-seo-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 120ms ease-out;
+}
+.ed-seo-bar.is-over .ed-seo-bar-fill {
+  background: var(--warn, #c80);
+}
+.ed-seo-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.ed-seo-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--fg-mute);
+  line-height: 1.5;
+}
+
+/* ─── Editor status bar (foot) refresh ──────────────────────── */
+.editor-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  border-top: 1px solid var(--glass-border);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-mute);
+  letter-spacing: 0.04em;
+}
+.editor-foot-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.editor-foot-sep {
+  opacity: 0.5;
+}
+.editor-foot-r {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ─── Autosave pip ─────────────────────────────────────────── */
+.autosave-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: 1px solid transparent;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease;
+}
+.autosave-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-mute);
+  display: inline-block;
+}
+.autosave-indicator[data-state="idle"] {
+  color: var(--fg-mute);
+}
+.autosave-indicator[data-state="dirty"] {
+  color: var(--warn, #c80);
+}
+.autosave-indicator[data-state="dirty"] .autosave-pip {
+  background: var(--warn, #c80);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--warn, #c80) 60%, transparent);
+}
+.autosave-indicator[data-state="saving"] {
+  color: var(--fg-dim);
+}
+.autosave-indicator[data-state="saving"] .autosave-pip {
+  background: var(--accent);
+  animation: te-autosave-spin 900ms linear infinite;
+  box-shadow: 0 0 6px var(--accent-glow, transparent);
+}
+.autosave-indicator[data-state="saved"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-soft);
+}
+.autosave-indicator[data-state="saved"] .autosave-pip {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow, transparent);
+}
+.autosave-indicator[data-state="error"] {
+  color: var(--danger, #c44);
+  border-color: color-mix(in srgb, var(--danger, #c44) 40%, transparent);
+  background: var(--danger-soft, color-mix(in srgb, #c44 14%, transparent));
+  cursor: pointer;
+}
+.autosave-indicator[data-state="error"] .autosave-pip {
+  background: var(--danger, #c44);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--danger, #c44) 60%, transparent);
+}
+@keyframes te-autosave-spin {
+  0% {
+    opacity: 0.3;
+    transform: scale(0.7);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.3;
+    transform: scale(0.7);
+  }
+}
+
+/* ─── Find & Replace modal ──────────────────────────────────── */
+.te-find-modal {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 200;
+  background: var(--glass-tint, #1f1f1f);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 320px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.te-find-modal[hidden] {
+  display: none;
+}
+.te-find-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.te-find-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--glass-highlight);
+  color: var(--fg);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.te-find-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.te-find-input[aria-invalid="true"] {
+  border-color: var(--danger, #c44);
+}
+.te-find-btn {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--fg-dim);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.2;
+}
+.te-find-btn:hover,
+.te-find-btn:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+  outline: 0;
+}
+.te-find-close {
+  margin-left: 4px;
+}
+.te-find-count {
+  color: var(--fg-mute);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.te-find-row-opts {
+  gap: 8px;
+}
+.te-find-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--fg-mute);
+  cursor: pointer;
+}
+.te-find-opt input {
+  margin: 0;
+  cursor: pointer;
+}
+.te-find-err {
+  color: var(--danger, #c44);
+  font-size: 11px;
+  margin-left: auto;
+}
+
+/* ProseMirror find-match decoration */
+.ProseMirror .te-find-match {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.ProseMirror .te-find-match-active {
+  background: color-mix(in srgb, var(--warn, #c80) 56%, transparent);
+  outline: 1px solid var(--warn, #c80);
+}
+
+/* ─── Drag handle (Phase 3d) ────────────────────────────────── */
+/*
+   tiptap-extension-global-drag-handle injects a single absolutely
+   positioned <div class="drag-handle"> that follows the hovered
+   block. We style it as a slim grab handle in the left margin of the
+   editor; it disappears unless the cursor is over a block.
+*/
+.drag-handle {
+  position: fixed;
+  opacity: 0;
+  width: 22px;
+  height: 22px;
+  z-index: 50;
+  cursor: grab;
+  border-radius: 4px;
+  background-color: transparent;
+  background-image: radial-gradient(circle, var(--fg-mute) 1.2px, transparent 1.4px);
+  background-size: 6px 6px;
+  background-position: center;
+  background-repeat: repeat;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease;
+}
+.drag-handle:hover {
+  opacity: 1;
+  background-color: var(--glass-highlight);
+}
+.ProseMirror:hover ~ .drag-handle,
+.ProseMirror:focus ~ .drag-handle,
+.drag-handle.show {
+  opacity: 0.55;
+}
+.drag-handle:active {
+  cursor: grabbing;
+  opacity: 1;
+}
+.ProseMirror.dragging {
+  cursor: grabbing;
+}
+.ProseMirror .ProseMirror-selectednode.is-dragging,
+.ProseMirror [data-dragging="true"] {
+  opacity: 0.45;
+}
+/* Drop-cursor line shown while dragging */
+.prosemirror-dropcursor-block,
+.ProseMirror-dropcursor {
+  background: var(--accent) !important;
+  height: 2px !important;
+  border-radius: 1px;
+  box-shadow: 0 0 4px var(--accent-glow, transparent);
 }
