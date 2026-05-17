@@ -766,6 +766,78 @@ export function isSafeLinkUrl(raw) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Phase 7 — paste-to-embed helpers
+// ─────────────────────────────────────────────────────────────────
+//
+// A "single bare URL" paste is the standard cue for embeds. The
+// regex below is intentionally strict: we require https:// + a host
+// + nothing more than printable URL characters, and the whole text
+// must be the URL (otherwise the user pasted a URL inside a sentence
+// and we treat it as plain text — TipTap's autolink handles that).
+const SINGLE_URL_PASTE = /^https:\/\/[\w\-.]+(?::\d+)?(?:\/[^\s]*)?$/i;
+
+export function looksLikeSingleUrlPaste(text) {
+  if (typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 2000) return false;
+  if (/\s/.test(trimmed)) return false;
+  return SINGLE_URL_PASTE.test(trimmed);
+}
+
+/**
+ * Fallback when the host page didn't wire `te-slash-embed`. Prompts for
+ * a URL inline, calls /api/embed, and inserts the returned shortcode.
+ */
+function triggerEmbedPrompt(editor) {
+  const url = window.prompt('Embed URL (YouTube, Bluesky, Spotify, …)');
+  if (!url) return;
+  if (!/^https:\/\//i.test(url)) {
+    alert('Only https:// URLs are supported.');
+    return;
+  }
+  resolveEmbed(url)
+    .then((shortcode) => {
+      if (shortcode) {
+        editor
+          .chain()
+          .focus()
+          .insertContent(shortcode + '\n')
+          .run();
+      }
+      return null;
+    })
+    .catch((err) => {
+      console.warn('[embed] resolve failed', err);
+      alert('Could not resolve that URL.');
+    });
+}
+
+/**
+ * Call /api/embed and resolve with the shortcode string, or `null` if
+ * the upstream returned an error. The editor's host page is also free
+ * to call this directly (it's exported on the namespace).
+ *
+ * @param {string} url
+ * @returns {Promise<string | null>}
+ */
+export async function resolveEmbed(url) {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const res = await fetch('/api/embed?url=' + encodeURIComponent(url.trim()), {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    if (!body || typeof body.shortcode !== 'string') return null;
+    return body.shortcode;
+  } catch (err) {
+    console.warn('[embed] /api/embed failed', err);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Slash-menu command catalogue
 // ─────────────────────────────────────────────────────────────────
 //
@@ -892,12 +964,22 @@ const SLASH_ITEMS = [
   {
     id: 'embed',
     label: 'Embed',
-    hint: 'Embed video / tweet (Phase 7)',
+    hint: 'YouTube / Bluesky / Spotify / link card',
     group: 'Insert',
-    keywords: ['embed', 'video', 'tweet', 'iframe'],
-    placeholder: true,
+    keywords: ['embed', 'video', 'tweet', 'iframe', 'youtube', 'bluesky', 'mastodon', 'spotify'],
     run: (editor, range) => {
+      // Phase 7: drop the `/embed` marker, then prompt for a URL and
+      // hand off to the page-level wiring (which calls the admin's
+      // /api/embed lookup and inserts the resulting shortcode). If the
+      // host page didn't wire a handler, fall back to an inline prompt
+      // so the slash item still does something coherent.
       editor.chain().focus().deleteRange(range).run();
+      const dom = editor.view.dom;
+      const evt = new CustomEvent('te-slash-embed', { bubbles: true, cancelable: true });
+      const handled = !dom.dispatchEvent(evt);
+      if (!handled) {
+        triggerEmbedPrompt(editor);
+      }
     },
   },
   {
@@ -1000,6 +1082,173 @@ function filterSlashItems(query) {
     const hay = (item.label + ' ' + (item.keywords || []).join(' ')).toLowerCase();
     return hay.includes(q);
   }).slice(0, 14);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Phase 7 — paste-to-embed floating UI + URL splice helpers
+// ─────────────────────────────────────────────────────────────────
+//
+// The UI is a tiny absolutely-positioned card with three buttons:
+//   1. Insert embed   — calls /api/embed and replaces the URL line
+//   2. Insert link    — leaves the auto-linked URL in place
+//   3. Cancel (ESC)   — leaves the URL but dismisses the picker
+//
+// We don't render a server-side preview thumbnail in this iteration —
+// the placeholder shortcode already renders a thumb on the published
+// page, and an extra round-trip just to preview in the editor would
+// double the latency. We do show the resolved provider name once the
+// embed succeeds (the shortcode itself is human-readable).
+function createEmbedPasteUI() {
+  const root = document.createElement('div');
+  root.className = 'te-embed-paste';
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-label', 'Convert pasted link to embed');
+  root.style.position = 'absolute';
+  root.style.zIndex = '320';
+  root.style.display = 'none';
+  root.innerHTML =
+    '<div class="te-embed-paste-row">' +
+    '  <span class="te-embed-paste-msg">Pasted URL detected.</span>' +
+    '  <button type="button" class="te-embed-paste-btn primary" data-action="embed">Insert embed</button>' +
+    '  <button type="button" class="te-embed-paste-btn" data-action="link">Insert link instead</button>' +
+    '  <button type="button" class="te-embed-paste-btn ghost" data-action="cancel" aria-label="Dismiss (ESC)">×</button>' +
+    '</div>';
+  document.body.appendChild(root);
+
+  let handlers = {};
+  let onDocKey = null;
+
+  function setBusy(busy) {
+    const btns = root.querySelectorAll('button');
+    btns.forEach((b) => {
+      b.disabled = Boolean(busy);
+    });
+    const primary = root.querySelector('[data-action="embed"]');
+    if (primary) {
+      primary.textContent = busy ? 'Resolving…' : 'Insert embed';
+    }
+  }
+
+  function show(opts) {
+    handlers = opts || {};
+    setBusy(false);
+    root.style.display = 'block';
+    positionNearSelection();
+    onDocKey = (e) => {
+      if (e.key === 'Escape') {
+        hide();
+        try {
+          handlers.onCancel && handlers.onCancel();
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    };
+    document.addEventListener('keydown', onDocKey, true);
+  }
+  function hide() {
+    root.style.display = 'none';
+    if (onDocKey) document.removeEventListener('keydown', onDocKey, true);
+    onDocKey = null;
+    handlers = {};
+  }
+  function positionNearSelection() {
+    // Best-effort: place under the current text-selection rect. If we
+    // can't read a selection rect (jsdom, off-screen), fall back to the
+    // top-left of the editor root.
+    let rect = null;
+    try {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const r = sel.getRangeAt(0);
+        rect = r.getBoundingClientRect();
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    const docTop = window.scrollY || 0;
+    const docLeft = window.scrollX || 0;
+    const top = ((rect && rect.bottom) || 100) + docTop + 6;
+    const left = ((rect && rect.left) || 50) + docLeft;
+    root.style.top = top + 'px';
+    root.style.left = left + 'px';
+  }
+  root.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!t || t.tagName !== 'BUTTON') return;
+    const action = t.getAttribute('data-action');
+    if (action === 'embed' && handlers.onEmbed) handlers.onEmbed();
+    else if (action === 'link' && handlers.onLink) handlers.onLink();
+    else if (action === 'cancel' && handlers.onCancel) handlers.onCancel();
+  });
+  return {
+    show,
+    hide,
+    setBusy,
+    element: root,
+    destroy() {
+      hide();
+      try {
+        root.remove();
+      } catch (_) {
+        /* ignore */
+      }
+    },
+  };
+}
+
+/**
+ * Find the most recently inserted instance of `url` in the document and
+ * replace it (plus any auto-link mark) with the given shortcode block.
+ * We scan from the current selection backwards because the paste just
+ * happened — the URL is essentially always at or before the cursor.
+ *
+ * @param {import('@tiptap/core').Editor} editor
+ * @param {string} url
+ * @param {string} shortcode
+ */
+function replacePastedUrlWith(editor, url, shortcode) {
+  const { state } = editor;
+  const { doc, selection } = state;
+  let from = -1;
+  let to = -1;
+  // Walk the doc text and pick the last match that ends at or before
+  // the cursor. We use nodesBetween so we get text-node ranges with
+  // correct ProseMirror positions.
+  doc.descendants((node, pos) => {
+    if (!node.isText) return;
+    const text = node.text || '';
+    let idx = text.indexOf(url);
+    while (idx !== -1) {
+      const start = pos + idx;
+      const end = start + url.length;
+      // Prefer the latest match at or before the selection head.
+      if (end <= selection.from + 1) {
+        from = start;
+        to = end;
+      }
+      idx = text.indexOf(url, idx + 1);
+    }
+    return true;
+  });
+  if (from < 0) {
+    // Fallback: just insert at cursor — better than losing the embed.
+    editor
+      .chain()
+      .focus()
+      .insertContent('\n' + shortcode + '\n')
+      .run();
+    return;
+  }
+  // Delete the URL text (and any link mark that covers it) and insert
+  // the shortcode literal as a fresh paragraph.
+  editor
+    .chain()
+    .focus()
+    .setTextSelection({ from, to })
+    .deleteSelection()
+    .insertContent(shortcode + '\n')
+    .run();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -2623,6 +2872,59 @@ export function mount(rootEl, initialMarkdown, options) {
 
   const parser = buildParser(editor.schema);
 
+  // ── Phase 7: paste-to-embed ──────────────────────────────────
+  //
+  // If the user pastes exactly one URL into the WYSIWYG view, we
+  // hijack the paste, insert the URL as plain text (so the user can
+  // see what's happening), and float a small action bar offering
+  // "Insert embed" / "Insert link instead" / cancel. "Insert embed"
+  // calls /api/embed and replaces the URL line with the returned
+  // shortcode. "Insert link" leaves the auto-linked URL in place
+  // (TipTap's Link extension handles auto-linking).
+  //
+  // We do NOT touch paste events in source (CodeMirror) mode — the
+  // user there is intentionally editing the shortcode literal.
+  const embedPasteUI = createEmbedPasteUI();
+  wysiwygMount.addEventListener('paste', (e) => {
+    if (mode !== 'wysiwyg') return;
+    const text = (e.clipboardData && (e.clipboardData.getData('text/plain') || '').trim()) || '';
+    if (!looksLikeSingleUrlPaste(text)) return;
+    // Let TipTap's autolink + paste handlers run first — the URL ends
+    // up as a clickable link the user can see. We then offer the
+    // embed swap via the floating UI.
+    queueMicrotask(() => offerEmbedSwap(text));
+  });
+
+  function offerEmbedSwap(url) {
+    embedPasteUI.show({
+      url,
+      onEmbed: async () => {
+        embedPasteUI.setBusy(true);
+        let shortcode = null;
+        try {
+          shortcode = await resolveEmbed(url);
+        } catch (err) {
+          console.warn('[embed] resolve failed', err);
+        }
+        embedPasteUI.hide();
+        if (!shortcode) {
+          alert('Could not resolve that URL for embed.');
+          return;
+        }
+        // Replace the just-pasted URL (and any auto-link wrapper) with
+        // the shortcode. The auto-linked text node still says the URL,
+        // so we walk back from the cursor and remove text matching it
+        // before inserting the shortcode.
+        replacePastedUrlWith(editor, url, shortcode);
+      },
+      onLink: () => embedPasteUI.hide(),
+      onCancel: () => embedPasteUI.hide(),
+    });
+  }
+  // Cleanup wiring: tear down the floating UI when the editor is
+  // destroyed.
+  const embedPasteCleanup = () => embedPasteUI.destroy();
+
   // Setting "content" with a string treats it as HTML; for round-trip
   // safety we parse Markdown → ProseMirror doc and apply it directly.
   function applyMarkdownToEditor(md, emit) {
@@ -3119,14 +3421,17 @@ export function mount(rootEl, initialMarkdown, options) {
   );
   gInsert.appendChild(
     tbBtn({
-      label: 'Embed (Phase 7 wires)',
+      label: 'Embed',
       shortcut: '',
       glyph: '⧉',
-      className: 'is-placeholder',
       active: () => false,
-      canRun: () => false,
       run: () => {
-        /* Phase 7 */
+        // Phase 7: dispatch the same event the slash menu uses so the
+        // page-level wiring can route through its own picker if it
+        // wants to; fall back to an inline URL prompt + /api/embed.
+        const evt = new CustomEvent('te-slash-embed', { bubbles: true, cancelable: true });
+        const handled = !editor.view.dom.dispatchEvent(evt);
+        if (!handled) triggerEmbedPrompt(editor);
       },
     }),
   );
@@ -3542,6 +3847,12 @@ export function mount(rootEl, initialMarkdown, options) {
       }
       linkDialog = null;
     }
+    // Phase 7 paste-to-embed UI.
+    try {
+      embedPasteCleanup();
+    } catch (_) {
+      /* ignore */
+    }
     rootEl.innerHTML = '';
     rootEl.classList.remove('te-editor');
   };
@@ -3645,4 +3956,4 @@ function isMacLike() {
 }
 
 // Default export is the namespace expected on window.TEEditor.
-export default { mount, isSafeLinkUrl };
+export default { mount, isSafeLinkUrl, resolveEmbed, looksLikeSingleUrlPaste };

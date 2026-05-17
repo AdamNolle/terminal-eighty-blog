@@ -44,6 +44,13 @@
        [data-gallery-href] clicks. Non-module so it runs in the
        jsdom test harness too. Defer = no parse-blocking. */ -}}
 <script src="{{ "js/lightbox.js" | relURL }}" defer></script>
+{{- /* Phase 7 click-to-load embed handler — listens for clicks on
+       [data-embed-href] placeholders and swaps in an iframe / script
+       on activation. Non-module so it runs in the jsdom test harness
+       and behind defer for non-blocking load. The selector is narrow
+       (only [data-embed-href]); lightbox.js explicitly skips this
+       same selector to keep the two systems orthogonal. */ -}}
+<script src="{{ "js/embed-loader.js" | relURL }}" defer></script>
 {{ partial "analytics.html" . }}
 </body>
 </html>

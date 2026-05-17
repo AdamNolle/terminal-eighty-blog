@@ -538,3 +538,72 @@ meta-refresh + JS fallback + canonical link. `npm run build` and
 For **per-post** redirects (e.g. the post moved slug), prefer Hugo's
 built-in `aliases:` front-matter field — those are auto-emitted by
 Hugo and stay alongside the post.
+
+## Phase 7 — embeds (paste-to-embed)
+
+Pasting a single bare URL into the editor offers an inline
+"Insert embed" picker. Confirming calls `GET /api/embed?url=…`,
+which walks a small provider registry (`admin/src/services/embed/`)
+and returns a uniform record + a Hugo shortcode the editor pastes in
+place of the URL.
+
+Supported first-class providers:
+
+- YouTube (`youtube.com/watch`, `youtu.be/…`, `/shorts/…`)
+- Vimeo (`vimeo.com/<id>`)
+- Bluesky (`bsky.app/profile/<handle>/post/<rkey>`)
+- Mastodon (any instance — `https://<host>/@user/<status-id>`)
+- TikTok (`tiktok.com/@user/video/<id>`)
+- GitHub Gist (`gist.github.com/<owner>/<id>`)
+- CodePen (`codepen.io/<user>/pen/<id>`)
+- SoundCloud (`soundcloud.com/<user>/<track>`)
+- Spotify (`open.spotify.com/<kind>/<id>`)
+
+Everything else falls through to a server-side OG-scrape that returns
+a static link card (no iframe, no JS).
+
+### Privacy + performance contract
+
+Every shortcode renders a `<button data-embed-href="…">` placeholder
+that is swapped for a real `<iframe>` (or, for Gist, a `<script>`) on
+click by `site/static/js/embed-loader.js`. No iframe loads on initial
+paint — Lighthouse stays in the green and the user opts in per embed.
+
+The `[data-embed-href]` selector is reserved for embeds; the Phase 6
+lightbox (`site/static/js/lightbox.js`) explicitly skips clicks that
+descend from one. Don't reuse the attribute name for anything else.
+
+### Adding a new provider
+
+1. Add a `match(URL)` + `resolve(URL, m)` pair to the `PROVIDERS`
+   array in `admin/src/services/embed/providers.js`. The matcher
+   returns `null` to defer to the next provider; the resolver returns
+   the uniform `{ provider, id, shortcode, … }` record.
+2. Create `site/layouts/shortcodes/embed-<name>.html` that emits the
+   placeholder button. Reuse the `embed-placeholder` class so the
+   theme tokens carry across.
+3. Add a coverage row to `admin/test/embed.test.js`.
+4. Add the provider id to the "Supported first-class providers" list
+   above.
+
+### Mastodon host handling
+
+Mastodon doesn't have a single host — every instance ships its own
+`/api/oembed` endpoint at the same path. The matcher in `providers.js`
+accepts any host whose path looks like `/@<user>/<numeric-status-id>`
+and explicitly denylists known impostors (Threads, Twitter/X). The
+resolver dials the host extracted from the input URL.
+
+### Cache
+
+Successful resolutions cache for 24h in the `embed_cache` table
+(`admin/src/db/migrations/005_embed_cache.sql`). Responses set
+`X-Embed-Cache: HIT|MISS` so a paste-twice flow is observable.
+
+### h-entry / microformats note (Phase 8 forward)
+
+The placeholder buttons and OG card live inside the post body. Phase 8
+will wrap the whole body in an `e-content` element; the embed buttons
+are plain HTML descendants and do not break that contract. The
+generic OG card is already an `<a>` with `rel="noopener external"` —
+Phase 8 can layer `u-bookmark-of` on top without changing this file.

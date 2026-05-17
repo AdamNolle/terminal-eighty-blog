@@ -24,6 +24,10 @@ import settingsRoutes from './src/routes/settings.js';
 import taxonomiesRoutes from './src/routes/taxonomies.js';
 import redirectsRoutes from './src/routes/redirects.js';
 import activityRoutes from './src/routes/activity.js';
+// Phase 7: paste-to-embed lookup. Resolves YouTube/Vimeo/Bluesky/…
+// URLs through their oEmbed endpoints (or a generic OG scrape) and
+// caches the result for 24h in the `embed_cache` table.
+import embedRoutes from './src/routes/embed.js';
 // Phase 4: tiny migration runner — applies any pending DDL in
 // `src/db/migrations/` (auth tables, media table, …) before we serve
 // the first request. Safe to call on every boot; already-applied
@@ -146,6 +150,8 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/taxonomies', taxonomiesRoutes);
 app.use('/api/redirects', redirectsRoutes);
 app.use('/api/activity', activityRoutes);
+// Phase 7
+app.use('/api/embed', embedRoutes);
 // Templates static mount — read-only access to admin/templates/*.md so
 // the "New Post" picker can fetch each scaffold.
 app.use('/api/templates', express.static(join(__dirname, 'templates'), { fallthrough: false }));
