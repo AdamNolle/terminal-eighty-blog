@@ -132,7 +132,14 @@
           </div>
           <div id="cm-error-host"></div>
           <div class="te-cm-list" id="cm-list" role="list" aria-live="polite">
-            <div class="te-cm-row te-cm-row-head" role="row">
+            <!--
+              Header is purely visual labels for the data rows. We mark
+              it aria-hidden so axe doesn't expect role="row" semantics
+              (the parent is role="list", not role="grid"), and so a
+              screen reader doesn't announce the column legend before
+              every row.
+            -->
+            <div class="te-cm-row te-cm-row-head" aria-hidden="true">
               <span></span>
               <span>Author</span>
               <span>Post / excerpt</span>
@@ -225,7 +232,7 @@
     if (!list) return;
     // Preserve the header row.
     list.innerHTML = `
-      <div class="te-cm-row te-cm-row-head" role="row">
+      <div class="te-cm-row te-cm-row-head" aria-hidden="true">
         <span></span>
         <span>Author</span>
         <span>Post / excerpt</span>

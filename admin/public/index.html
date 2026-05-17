@@ -102,7 +102,7 @@
       </aside>
 
       <!-- ============ MAIN ============ -->
-      <main class="main">
+      <main id="main" class="main" tabindex="-1">
         <header class="topbar">
           <div class="crumb">
             <span class="tmark s24" aria-hidden="true"></span>
@@ -156,7 +156,7 @@
           </div>
         </header>
 
-        <div id="main" class="stage">
+        <div id="stage" class="stage">
           <div id="view-dashboard">
             <div class="sec-head">
               <div>
@@ -232,14 +232,23 @@
                 <span class="count" id="posts-visible">—</span>
               </div>
 
-              <div class="row-grid head" role="row">
-                <span class="r-link" aria-hidden="true">
+              <!--
+                The header is a CSS-grid column legend, not a real table
+                row. Marking it role="row" without a role="grid" parent
+                trips axe (aria-required-parent + aria-required-children),
+                and the contents are aria-hidden anyway because the posts
+                table rendered into #posts-rows below carries its own
+                accessible labels per row. We leave the visible glyphs
+                here for sighted users and skip the role.
+              -->
+              <div class="row-grid head" aria-hidden="true">
+                <span class="r-link">
                   <span class="r-num">№</span>
                   <span class="r-title-wrap">Title</span>
                   <span class="r-status" style="text-align: right">Tags</span>
                   <span class="r-date">Date</span>
                 </span>
-                <span class="r-actions" aria-hidden="true"></span>
+                <span class="r-actions"></span>
               </div>
               <div id="posts-rows">
                 <div class="posts-empty" id="posts-loading">Loading posts…</div>
@@ -505,7 +514,16 @@
                 <span class="te-dz-label">Drop files to upload, or click to choose</span>
               </div>
 
-              <div id="media-grid" class="view-grid" role="grid" aria-label="Uploaded media"></div>
+              <!--
+                role="list" + listitem children (set in media.js render).
+                A grid pattern would need row groups + arrow-key roving
+                tabindex semantics WCAG aria-grid expects; the cards
+                already implement keyboard nav via .te-media-thumb
+                buttons inside each card, which is the actually-focusable
+                target. Switching to list keeps axe happy without
+                changing the visible UI.
+              -->
+              <div id="media-grid" class="view-grid" role="list" aria-label="Uploaded media"></div>
               <div id="media-empty" class="te-media-empty" hidden></div>
             </div>
           </div>

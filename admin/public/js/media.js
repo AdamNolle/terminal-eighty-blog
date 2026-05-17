@@ -423,7 +423,7 @@
             <button type="button" class="te-media-retry" data-retry-id="${TE.escape(m.id)}" aria-label="Retry conversion">Retry</button>`;
         }
         return `
-        <div class="te-media-card ${sel ? 'is-selected' : ''} status-${TE.escape(status)}" data-id="${TE.escape(m.id)}" role="gridcell">
+        <div class="te-media-card ${sel ? 'is-selected' : ''} status-${TE.escape(status)}" data-id="${TE.escape(m.id)}" role="listitem">
           <label class="te-media-check">
             <input type="checkbox" data-bulk-id="${TE.escape(m.id)}" ${sel ? 'checked' : ''}
                    aria-label="Select ${TE.escape(m.original_name || m.filename)}" />

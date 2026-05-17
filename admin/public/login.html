@@ -18,6 +18,7 @@
     <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
   </head>
   <body data-page="login">
+    <a class="skip-link" href="#main">Skip to content</a>
     <div class="backdrop" aria-hidden="true">
       <div class="lava-blob a"></div>
       <div class="lava-blob b"></div>
@@ -36,7 +37,7 @@
       <span id="btn-theme-glyph" aria-hidden="true">☾</span>
     </button>
 
-    <main class="auth-card" id="main">
+    <main class="auth-card" id="main" tabindex="-1">
       <div class="auth-brand">
         <span class="tmark s32" aria-hidden="true"></span>
         <span class="name">
