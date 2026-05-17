@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Admin shell smoke tests (Phase 2).
+ * Admin shell smoke tests (Phase 2, gated by Phase 12).
  *
  * The admin SPA depends on the Node/Express backend for /api/* and
  * /auth/*. We don't boot Express in this Playwright suite (CI doesn't
@@ -12,6 +12,13 @@
  * fail with net::ERR_FAILED — that's fine. The frontend wraps those
  * in try/catch and falls through gracefully; we only fail the test on
  * uncaught exceptions or hard JS errors.
+ *
+ * Two scenarios require a real http(s) origin (live admin server) and
+ * are gated on DEV_STACK_RUNNING=1 — the same pattern admin-a11y.spec.js
+ * uses. Under file:// the scripts referenced via absolute paths
+ * (`/js/common.js`) can't load, so `window.TE` is never populated and
+ * the localStorage write path used by the theme toggle can fire before
+ * the listener wires up. See CONTRIBUTING.md for how to enable them.
  */
 import { test, expect } from '@playwright/test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -22,6 +29,9 @@ const PUBLIC_DIR = join(__dirname, '..', '..', 'admin', 'public');
 const loginUrl = pathToFileURL(join(PUBLIC_DIR, 'login.html')).href;
 const indexUrl = pathToFileURL(join(PUBLIC_DIR, 'index.html')).href;
 const editorUrl = pathToFileURL(join(PUBLIC_DIR, 'editor.html')).href;
+
+const stackUp = process.env.DEV_STACK_RUNNING === 'true' || process.env.DEV_STACK_RUNNING === '1';
+const liveAdminUrl = process.env.ADMIN_ORIGIN || 'http://127.0.0.1:8787';
 
 /**
  * Set up a console listener that fails the test on any unexpected
@@ -62,7 +72,11 @@ test.describe('admin shell', () => {
   });
 
   test('login.html theme toggle flips data-theme', async ({ page }) => {
-    await page.goto(loginUrl);
+    test.skip(
+      !stackUp,
+      'Theme toggle wires up in common.js which only loads from http(s); set DEV_STACK_RUNNING=1.',
+    );
+    await page.goto(`${liveAdminUrl}/login.html`);
     const html = page.locator('html');
     await expect(html).toHaveAttribute('data-theme', 'dark');
     await page.locator('#btn-theme').click();
@@ -83,7 +97,12 @@ test.describe('admin shell', () => {
   });
 
   test('index.html Cmd+K palette opens and closes', async ({ page }) => {
-    await page.goto(indexUrl);
+    test.skip(
+      !stackUp,
+      'Cmd+K palette is wired in common.js which only loads from http(s); set DEV_STACK_RUNNING=1.',
+    );
+    await page.goto(`${liveAdminUrl}/index.html`);
+    await page.waitForFunction(() => Boolean(/** @type {any} */ (window).TE));
     await page.keyboard.press('Meta+K');
     await expect(page.locator('#cmdk')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -99,8 +118,10 @@ test.describe('admin shell', () => {
     // Phase 3 will replace #editor-fallback with TipTap. For now it's
     // a real <textarea> the editor.js code drives.
     await expect(page.locator('#editor-fallback')).toBeVisible();
-    // Right rail frontmatter panels
-    await expect(page.locator('.ed-side details')).toHaveCount(4);
+    // Right rail frontmatter panels — Phase 5e expanded the rail to:
+    // Frontmatter, Schedule, Cover image, Custom CSS/JS, Draft preview,
+    // SEO, Media, Publish (8 collapsible <details> panels).
+    await expect(page.locator('.ed-side details')).toHaveCount(8);
     expect(errors).toEqual([]);
   });
 });
