@@ -54,7 +54,12 @@ import { invalidatePostRefs, postsReferencing } from '../utils/postRefs.js';
 // Phase 5: conversion queue producer + retry plumbing. The worker
 // (started by server.js) drains rows from `conversion_jobs`; here we
 // only enqueue and trigger retries.
-import { enqueueJob, retryJob, latestJobForMedia } from '../services/conversion/index.js';
+import {
+  enqueueJob,
+  retryJob,
+  latestJobForMedia,
+  isCodeFile,
+} from '../services/conversion/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const router = Router();
@@ -257,20 +262,28 @@ function diskPathFor(row) {
 // Phase 5b ffmpeg transcoder. Video/audio enqueue their own ffmpeg job
 // directly (image classification doesn't apply).
 //
+// Phase 5c adds three more job types:
+//   - PDFs (mime application/pdf) → `pdf` (poppler cover + thumb)
+//   - Archives (classifyMime → 'archive') → `archive` (yauzl listing)
+//   - Source files (extension allowlist via isCodeFile) → `code`
+//     (shiki preview + plaintext fallback)
+//
 // Returns true when a job was queued (so the upload handler can mark
-// `media.status='processing'`). Phase 5c will extend this with PDF /
-// code / archive routing; until then those types stay at status='ready'.
+// `media.status='processing'`).
 /**
  * @param {Record<string, any>} row
  * @returns {boolean}
  */
 function enqueueConversion(row) {
   const type = classifyMime(row.mime_type);
-  /** @type {'image' | 'video' | 'audio' | null} */
+  /** @type {'image' | 'video' | 'audio' | 'pdf' | 'code' | 'archive' | null} */
   let jobType = null;
   if (type === 'image') jobType = 'image';
   else if (type === 'video') jobType = 'video';
   else if (type === 'audio') jobType = 'audio';
+  else if (String(row.mime_type || '').toLowerCase() === 'application/pdf') jobType = 'pdf';
+  else if (type === 'archive') jobType = 'archive';
+  else if (isCodeFile(row.original_name) || isCodeFile(row.filename)) jobType = 'code';
   if (!jobType) return false;
   try {
     enqueueJob(row.id, jobType, { db });
@@ -611,11 +624,14 @@ router.post('/:id/retry', (req, res) => {
     // (e.g. an image upload that somehow skipped enqueue, or a re-queue
     // of a video/audio whose original job row was pruned).
     const cls = classifyMime(row.mime_type);
-    /** @type {'image' | 'video' | 'audio' | null} */
+    /** @type {'image' | 'video' | 'audio' | 'pdf' | 'code' | 'archive' | null} */
     let fallback = null;
     if (cls === 'image') fallback = 'image';
     else if (cls === 'video') fallback = 'video';
     else if (cls === 'audio') fallback = 'audio';
+    else if (String(row.mime_type || '').toLowerCase() === 'application/pdf') fallback = 'pdf';
+    else if (cls === 'archive') fallback = 'archive';
+    else if (isCodeFile(row.original_name) || isCodeFile(row.filename)) fallback = 'code';
     if (fallback) {
       const queued = enqueueJob(row.id, fallback, { db });
       return res.json({ retried: true, job_id: queued.id });
