@@ -19,6 +19,10 @@ export default defineConfig({
       // tests that talk to SQLite; admin frontend modules use the
       // `*.vitest.test.js` suffix to keep the boundary explicit.
       'admin/test/**/*.vitest.{test,spec}.js',
+      // Phase 5d: dev-experience scripts (seed/reset/check). These
+      // touch real SQLite and the local filesystem, so they live under
+      // scripts/dev/__tests__/ rather than admin/test/.
+      'scripts/dev/__tests__/**/*.test.js',
     ],
     exclude: [
       'node_modules/**',
