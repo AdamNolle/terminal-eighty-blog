@@ -131,18 +131,22 @@ export async function stopWorker() {
 export async function drainOnce(opts) {
   const concurrency = (opts && opts.concurrency) || DEFAULT_CONCURRENCY;
   const db = state.db || openDb();
-  /** @type {Promise<void>[]} */
-  const wave = [];
-  while (wave.length < concurrency) {
-    const job = claimNext({ db });
-    if (!job) break;
-    wave.push(runJob(job, db));
+  // Drain in waves until the queue is empty. Each wave runs up to
+  // `concurrency` jobs in parallel, then awaits them, then re-checks for
+  // new pending work. This handles two cases at once: (1) the regular
+  // polling worker that wants to clear out backlog before sleeping, and
+  // (2) tests that enqueue a job and immediately await a single drain.
+  while (true) {
+    /** @type {Promise<void>[]} */
+    const wave = [];
+    while (wave.length < concurrency) {
+      const job = claimNext({ db });
+      if (!job) break;
+      wave.push(runJob(job, db));
+    }
+    if (!wave.length) break;
+    await Promise.allSettled(wave);
   }
-  if (!wave.length) {
-    if (!state.db) db.close();
-    return;
-  }
-  await Promise.allSettled(wave);
   if (!state.db) db.close();
 }
 

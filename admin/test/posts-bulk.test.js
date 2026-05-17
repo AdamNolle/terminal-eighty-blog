@@ -14,8 +14,16 @@ let server;
 let baseUrl;
 let tempDir;
 let postsDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 function writePost(slug, fm, body = '') {
   const lines = ['---'];
@@ -81,14 +89,14 @@ after(async () => {
   }
 });
 
-test('GET /api/posts returns all three', { skip }, async () => {
+test('GET /api/posts returns all three', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/posts`);
   assert.equal(res.status, 200);
   const list = await res.json();
   assert.equal(list.length, 3);
 });
 
-test('bulk publish flips draft → false', { skip }, async () => {
+test('bulk publish flips draft → false', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/posts/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -101,7 +109,7 @@ test('bulk publish flips draft → false', { skip }, async () => {
   assert.match(raw, /draft: false/);
 });
 
-test('bulk add-tag pushes into tags[]', { skip }, async () => {
+test('bulk add-tag pushes into tags[]', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/posts/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -119,7 +127,7 @@ test('bulk add-tag pushes into tags[]', { skip }, async () => {
   assert.match(three, /newtag/);
 });
 
-test('bulk delete removes files', { skip }, async () => {
+test('bulk delete removes files', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/posts/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -129,7 +137,7 @@ test('bulk delete removes files', { skip }, async () => {
   assert.equal(existsSync(join(postsDir, 'three.md')), false);
 });
 
-test('unknown bulk action returns 400', { skip }, async () => {
+test('unknown bulk action returns 400', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/posts/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -138,7 +146,7 @@ test('unknown bulk action returns 400', { skip }, async () => {
   assert.equal(res.status, 400);
 });
 
-test('duplicate creates a -copy clone', { skip }, async () => {
+test('duplicate creates a -copy clone', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/posts/one.md/duplicate`, { method: 'POST' });
   assert.equal(res.status, 200);
   const body = await res.json();
@@ -152,11 +160,11 @@ test('duplicate creates a -copy clone', { skip }, async () => {
   assert.equal(body2.filename, 'one-copy-2.md');
 });
 
-test('preview returns a signed JWT URL', { skip }, async () => {
+test('preview returns a signed JWT URL', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/posts/one.md/preview`, { method: 'POST' });
   assert.equal(res.status, 200);
   const body = await res.json();
-  assert.match(body.url, /\/drafts\/one\?token=/);
+  assert.match(body.url, /\/drafts\/one\/?\?token=/);
   // Token should have three parts
   const token = body.url.split('token=')[1];
   assert.equal(token.split('.').length, 3);
@@ -167,7 +175,7 @@ test('preview returns a signed JWT URL', { skip }, async () => {
   assert.equal(payload.slug, 'one');
 });
 
-test('create with past publish_at is rejected', { skip }, async () => {
+test('create with past publish_at is rejected', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/posts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

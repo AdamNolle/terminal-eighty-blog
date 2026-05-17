@@ -29,8 +29,16 @@ let adminUrl;
 let publicApp;
 let publicUrl;
 let tempDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 let remark42;
 let commentsRoute;
@@ -138,7 +146,7 @@ after(async () => {
 
 // ── Remark42 client — JWT + shape ──────────────────────────────────
 
-test('adminJwt + verifyJwt round-trip with admin claim', { skip }, () => {
+test('adminJwt + verifyJwt round-trip with admin claim', skipOpts(), () => {
   const tok = remark42.adminJwt();
   const decoded = remark42.verifyJwt(tok);
   assert.ok(decoded);
@@ -147,7 +155,7 @@ test('adminJwt + verifyJwt round-trip with admin claim', { skip }, () => {
   assert.equal(decoded.aud, 'terminaleighty');
 });
 
-test('verifyJwt rejects a tampered token', { skip }, () => {
+test('verifyJwt rejects a tampered token', skipOpts(), () => {
   const tok = remark42.adminJwt();
   const parts = tok.split('.');
   parts[1] = Buffer.from(JSON.stringify({ user: { admin: false } }))
@@ -156,7 +164,7 @@ test('verifyJwt rejects a tampered token', { skip }, () => {
   assert.equal(remark42.verifyJwt(parts.join('.')), null);
 });
 
-test('normaliseComment maps a Remark42 record to the unified shape', { skip }, () => {
+test('normaliseComment maps a Remark42 record to the unified shape', skipOpts(), () => {
   const out = remark42.normaliseComment({
     id: 'r1',
     pid: '',
@@ -175,7 +183,7 @@ test('normaliseComment maps a Remark42 record to the unified shape', { skip }, (
   assert.equal(out.score, 3);
 });
 
-test('lastComments hits /api/v1/last/N and parses array body', { skip }, async () => {
+test('lastComments hits /api/v1/last/N and parses array body', skipOpts(), async () => {
   resetFetch();
   registerFetch(
     /\/api\/v1\/last\/\d+/,
@@ -199,7 +207,7 @@ test('lastComments hits /api/v1/last/N and parses array body', { skip }, async (
   assert.equal(rows[0].author.name, 'Bob');
 });
 
-test('blockUser issues PUT /api/v1/admin/user/:id?block=1&secret=…', { skip }, async () => {
+test('blockUser issues PUT /api/v1/admin/user/:id?block=1&secret=…', skipOpts(), async () => {
   resetFetch();
   let calledUrl = null;
   registerFetch(/\/api\/v1\/admin\/user\//, (url) => {
@@ -215,7 +223,7 @@ test('blockUser issues PUT /api/v1/admin/user/:id?block=1&secret=…', { skip },
   assert.equal(u.searchParams.get('secret'), 'test-secret-please-rotate');
 });
 
-test('listBlockedUsers parses the admin/blocked response', { skip }, async () => {
+test('listBlockedUsers parses the admin/blocked response', skipOpts(), async () => {
   resetFetch();
   registerFetch(
     /\/api\/v1\/admin\/blocked/,
@@ -235,7 +243,7 @@ test('listBlockedUsers parses the admin/blocked response', { skip }, async () =>
 
 // ── SSE channel ───────────────────────────────────────────────────
 
-test('SSE register + broadcast roundtrip', { skip }, async () => {
+test('SSE register + broadcast roundtrip', skipOpts(), async () => {
   const captured = [];
   const fakeRes = {
     headers: {},
@@ -260,7 +268,7 @@ test('SSE register + broadcast roundtrip', { skip }, async () => {
   sseService.unregister(id);
 });
 
-test('SSE broadcast on a foreign channel is NOT delivered', { skip }, () => {
+test('SSE broadcast on a foreign channel is NOT delivered', skipOpts(), () => {
   const captured = [];
   const fakeRes = {
     headers: {},
@@ -283,7 +291,7 @@ test('SSE broadcast on a foreign channel is NOT delivered', { skip }, () => {
 
 // ── /api/comments listing ─────────────────────────────────────────
 
-test('GET /api/comments status=pending returns only webmention rows', { skip }, async () => {
+test('GET /api/comments status=pending returns only webmention rows', skipOpts(), async () => {
   resetFetch();
   // Seed a pending webmention by POSTing to the receiver (it inserts
   // status='pending' immediately; the background validator is async
@@ -322,7 +330,7 @@ test('GET /api/comments status=pending returns only webmention rows', { skip }, 
   assert.ok(list.items.every((c) => c.status === 'pending'));
 });
 
-test('GET /api/comments status=all merges Remark42 + webmentions', { skip }, async () => {
+test('GET /api/comments status=all merges Remark42 + webmentions', skipOpts(), async () => {
   resetFetch();
   registerFetch(
     /\/api\/v1\/last\/\d+/,
@@ -368,7 +376,7 @@ test('GET /api/comments status=all merges Remark42 + webmentions', { skip }, asy
 
 // ── /api/comments/:id/reply ───────────────────────────────────────
 
-test('POST /api/comments/:id/reply forwards to Remark42 with admin JWT', { skip }, async () => {
+test('POST /api/comments/:id/reply forwards to Remark42 with admin JWT', skipOpts(), async () => {
   resetFetch();
   let postedUrl = null;
   let postedInit = null;
@@ -401,7 +409,7 @@ test('POST /api/comments/:id/reply forwards to Remark42 with admin JWT', { skip 
   assert.match(String(auth || ''), /^Bearer /);
 });
 
-test('POST /api/comments/:id/reply returns 409 for webmentions', { skip }, async () => {
+test('POST /api/comments/:id/reply returns 409 for webmentions', skipOpts(), async () => {
   // Pick the first webmention id we've seeded above.
   const list = await (await fetch(`${adminUrl}/api/comments?status=pending`)).json();
   assert.ok(list.items.length);
@@ -418,7 +426,7 @@ test('POST /api/comments/:id/reply returns 409 for webmentions', { skip }, async
 
 // ── Spam + block flow ─────────────────────────────────────────────
 
-test('POST /api/comments/:id/spam deletes + blocks + mirrors locally', { skip }, async () => {
+test('POST /api/comments/:id/spam deletes + blocks + mirrors locally', skipOpts(), async () => {
   resetFetch();
   // Stub the Remark42 admin delete + block-user endpoints to all 200.
   registerFetch(
@@ -454,7 +462,7 @@ test('POST /api/comments/:id/spam deletes + blocks + mirrors locally', { skip },
   assert.ok(blocks.items.some((b) => b.user_id === 'spammer'));
 });
 
-test('GET /api/comments/blocks survives Remark42 being down', { skip }, async () => {
+test('GET /api/comments/blocks survives Remark42 being down', skipOpts(), async () => {
   resetFetch();
   // Default fakeFetch → 404 for unregistered URLs. Listing should
   // still return the local mirror without throwing.
@@ -466,7 +474,7 @@ test('GET /api/comments/blocks survives Remark42 being down', { skip }, async ()
 
 // ── Webmention POST → SSE broadcast ───────────────────────────────
 
-test('webmention POST broadcasts on the webmentions SSE channel', { skip }, async () => {
+test('webmention POST broadcasts on the webmentions SSE channel', skipOpts(), async () => {
   const captured = [];
   const fakeRes = {
     headers: {},

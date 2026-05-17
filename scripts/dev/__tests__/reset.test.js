@@ -85,6 +85,15 @@ describe('reset.mjs runReset', () => {
 
   it('runs full reset → reseed when confirmed', async () => {
     if (!nativeBindingAvailable) return;
+    // The purge-helpers describe block leaves stub bytes at dbPath via its
+    // own beforeEach — clear them so runSeed can open a real SQLite file.
+    for (const f of ['', '-wal', '-shm']) {
+      try {
+        rmSync(`${dbPath}${f}`, { force: true });
+      } catch {
+        /* swallow: best-effort cleanup */
+      }
+    }
     // Pre-seed a real DB so reset has something to wipe.
     const { runSeed } = await import('../seed.mjs');
     process.env.AUTH_DB_PATH = dbPath;

@@ -29,9 +29,16 @@ import { join } from 'node:path';
 let server;
 let baseUrl;
 let tempDir;
-let skipReason = null;
+let skipReason = false;
 
-const skip = () => skipReason;
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 before(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 't80-auth-test-'));
@@ -86,7 +93,7 @@ after(async () => {
   if (tempDir) rmSync(tempDir, { recursive: true, force: true });
 });
 
-test('initial status: setup not complete', { skip }, async () => {
+test('initial status: setup not complete', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/auth/status`);
   assert.equal(res.status, 200);
   const body = await res.json();
@@ -94,7 +101,7 @@ test('initial status: setup not complete', { skip }, async () => {
   assert.equal(body.authenticated, false);
 });
 
-test('setup creates the first admin user and returns a session cookie', { skip }, async () => {
+test('setup creates the first admin user and returns a session cookie', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/auth/setup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -108,7 +115,7 @@ test('setup creates the first admin user and returns a session cookie', { skip }
   assert.match(cookie, /session=/, 'cookie name is `session`');
 });
 
-test('setup rejects a second admin once one exists', { skip }, async () => {
+test('setup rejects a second admin once one exists', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/auth/setup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -117,7 +124,7 @@ test('setup rejects a second admin once one exists', { skip }, async () => {
   assert.equal(res.status, 403);
 });
 
-test('password login: correct credentials → 200 + session cookie', { skip }, async () => {
+test('password login: correct credentials → 200 + session cookie', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/auth/login/password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -135,7 +142,7 @@ test('password login: correct credentials → 200 + session cookie', { skip }, a
   assert.equal(body.username, 'admin');
 });
 
-test('password login: wrong password → 401', { skip }, async () => {
+test('password login: wrong password → 401', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/auth/login/password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -144,7 +151,7 @@ test('password login: wrong password → 401', { skip }, async () => {
   assert.equal(res.status, 401);
 });
 
-test('password login: unknown user → 401', { skip }, async () => {
+test('password login: unknown user → 401', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/auth/login/password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -153,7 +160,7 @@ test('password login: unknown user → 401', { skip }, async () => {
   assert.equal(res.status, 401);
 });
 
-test('logout clears the session cookie', { skip }, async () => {
+test('logout clears the session cookie', skipOpts(), async () => {
   const login = await fetch(`${baseUrl}/auth/login/password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

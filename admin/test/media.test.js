@@ -34,9 +34,16 @@ let server;
 let baseUrl;
 let tempDir;
 let postsDir;
-let skipReason = null;
+let skipReason = false;
 
-const skip = () => skipReason;
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 // A 1x1 transparent PNG (minimal valid PNG). 67 bytes — small enough to
 // fit the cap, big enough that image-size can parse a width/height of 1.
@@ -129,7 +136,7 @@ async function upload(filename, buf, mime) {
   });
 }
 
-test('upload an image: 200 with id, url, dims', { skip }, async () => {
+test('upload an image: 200 with id, url, dims', skipOpts(), async () => {
   const res = await upload('logo.png', PNG_1x1, 'image/png');
   assert.equal(res.status, 200);
   const data = await res.json();
@@ -149,7 +156,7 @@ test('upload an image: 200 with id, url, dims', { skip }, async () => {
   assert.ok(existsSync(onDisk), 'file written to static dir');
 });
 
-test('upload dedup: same bytes return same id', { skip }, async () => {
+test('upload dedup: same bytes return same id', skipOpts(), async () => {
   const first = await upload('duplicate.png', PNG_1x1, 'image/png');
   const a = (await first.json()).file;
   const second = await upload('different-name.png', PNG_1x1, 'image/png');
@@ -157,7 +164,7 @@ test('upload dedup: same bytes return same id', { skip }, async () => {
   assert.equal(b.id, a.id, 'second upload of identical content dedups');
 });
 
-test('upload rejection: .exe → 415', { skip }, async () => {
+test('upload rejection: .exe → 415', skipOpts(), async () => {
   const buf = Buffer.from('not really an exe');
   const res = await upload('payload.exe', buf, 'application/octet-stream');
   assert.equal(res.status, 415);
@@ -165,7 +172,7 @@ test('upload rejection: .exe → 415', { skip }, async () => {
   assert.equal(data.error, 'denied_extension');
 });
 
-test('upload too large: 11 KB body against 10 KB cap → 413', { skip }, async () => {
+test('upload too large: 11 KB body against 10 KB cap → 413', skipOpts(), async () => {
   const big = Buffer.alloc(11 * 1024, 0xff);
   const res = await upload('big.bin', big, 'application/octet-stream');
   assert.equal(res.status, 413);
@@ -174,7 +181,7 @@ test('upload too large: 11 KB body against 10 KB cap → 413', { skip }, async (
   assert.equal(data.max_bytes, Number(process.env.MEDIA_MAX_UPLOAD_SIZE));
 });
 
-test('list with type filter', { skip }, async () => {
+test('list with type filter', skipOpts(), async () => {
   // Add a non-image so we can verify the type filter.
   const txt = Buffer.from('hello, world');
   await upload('notes.txt', txt, 'text/plain');
@@ -194,7 +201,7 @@ test('list with type filter', { skip }, async () => {
   for (const m of onlyDocs.items) assert.equal(m.type, 'document');
 });
 
-test('delete unused: 204', { skip }, async () => {
+test('delete unused: 204', skipOpts(), async () => {
   const r = await upload('to-delete.png', Buffer.from(PNG_1x1), 'image/png');
   // Force a unique hash so dedup doesn't return an existing id (the
   // image bytes are otherwise identical). We append a single byte so
@@ -210,7 +217,7 @@ test('delete unused: 204', { skip }, async () => {
   assert.equal(after.status, 404);
 });
 
-test('delete in-use: 409, then ?force=true → 204', { skip }, async () => {
+test('delete in-use: 409, then ?force=true → 204', skipOpts(), async () => {
   // Upload a fresh asset (use a slightly different PNG so we don't hit
   // the dedup of the previous image we deleted).
   // We can re-upload our 1x1 PNG — after the earlier delete, the hash
@@ -234,7 +241,7 @@ test('delete in-use: 409, then ?force=true → 204', { skip }, async () => {
   assert.equal(forced.status, 204);
 });
 
-test('GET /api/media/:id includes usage list', { skip }, async () => {
+test('GET /api/media/:id includes usage list', skipOpts(), async () => {
   // Fresh upload + reference.
   const customPng = Buffer.concat([PNG_1x1, Buffer.from([0x00])]); // hash differs
   // Just use a plain text file so the hash is unique without breaking

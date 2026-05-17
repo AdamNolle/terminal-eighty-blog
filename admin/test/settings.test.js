@@ -13,8 +13,16 @@ let server;
 let baseUrl;
 let tempDir;
 let siteDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 const SAMPLE_TOML = `baseURL = "https://example.com"
 title = "Example"
@@ -79,7 +87,7 @@ after(async () => {
   }
 });
 
-test('GET /api/settings returns hugo + author', { skip }, async () => {
+test('GET /api/settings returns hugo + author', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/settings`);
   assert.equal(res.status, 200);
   const body = await res.json();
@@ -89,7 +97,7 @@ test('GET /api/settings returns hugo + author', { skip }, async () => {
   assert.equal(typeof body.author.name, 'string');
 });
 
-test('TOML round-trip preserves comments + ordering', { skip }, async () => {
+test('TOML round-trip preserves comments + ordering', skipOpts(), async () => {
   // Modify one key
   const res = await fetch(`${baseUrl}/api/settings/hugo`, {
     method: 'PATCH',
@@ -110,7 +118,7 @@ test('TOML round-trip preserves comments + ordering', { skip }, async () => {
   assert.match(updated, /# Fill after Umami setup/);
 });
 
-test('TOML round-trip with no changes is a no-op', { skip }, async () => {
+test('TOML round-trip with no changes is a no-op', skipOpts(), async () => {
   const before = readFileSync(join(siteDir, 'hugo.toml'), 'utf-8');
   const res = await fetch(`${baseUrl}/api/settings/hugo`, {
     method: 'PATCH',
@@ -122,7 +130,7 @@ test('TOML round-trip with no changes is a no-op', { skip }, async () => {
   assert.equal(before, after);
 });
 
-test('PATCH author writes site/data/author.json', { skip }, async () => {
+test('PATCH author writes site/data/author.json', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/settings/author`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -135,7 +143,7 @@ test('PATCH author writes site/data/author.json', { skip }, async () => {
   assert.equal(parsed.social.bluesky, '@x');
 });
 
-test('helper apply directly preserves blank lines + comments', { skip }, async () => {
+test('helper apply directly preserves blank lines + comments', skipOpts(), async () => {
   const { apply, parse } = await import('../src/utils/toml-roundtrip.js');
   const out = apply(SAMPLE_TOML, [{ section: 'params', key: 'tagline', value: 'new' }]);
   // Blank-line layout intact (one before each [section])

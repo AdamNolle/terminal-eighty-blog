@@ -29,8 +29,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 let tempDir;
 let siteDir;
 let filesDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 // Lazily-imported modules under test.
 let queue;
@@ -116,7 +124,7 @@ function seedFromFixture({ fixture, filename, mime }) {
   return { id, diskPath, hash };
 }
 
-test('video: tiny.mp4 → H.264 MP4 + VP9 WebM + poster + thumb', { skip }, async () => {
+test('video: tiny.mp4 → H.264 MP4 + VP9 WebM + poster + thumb', skipOpts(), async () => {
   const { id } = seedFromFixture({
     fixture: 'tiny.mp4',
     filename: 'sample-video.mp4',
@@ -148,7 +156,7 @@ test('video: tiny.mp4 → H.264 MP4 + VP9 WebM + poster + thumb', { skip }, asyn
   assert.equal(webmMeta.videoCodec, 'vp9', 'WebM uses VP9');
 });
 
-test('video: 1080p cap downscales 4K source', { skip }, async () => {
+test('video: 1080p cap downscales 4K source', skipOpts(), async () => {
   // Synthesize a tiny 4K-like (3840×2160) clip on the fly so we don't
   // commit a giant binary fixture. 0.5s @ 12fps keeps the encode quick.
   const big = join(filesDir, 'big-source.mp4');
@@ -203,7 +211,7 @@ test('video: 1080p cap downscales 4K source', { skip }, async () => {
   assert.equal(mp4Meta.height, 1080, '16:9 preserved → 1080 tall');
 });
 
-test('audio: tiny.wav → MP3 + Opus + waveform.png', { skip }, async () => {
+test('audio: tiny.wav → MP3 + Opus + waveform.png', skipOpts(), async () => {
   const { id } = seedFromFixture({
     fixture: 'tiny.wav',
     filename: 'sample-audio.wav',
@@ -233,7 +241,7 @@ test('audio: tiny.wav → MP3 + Opus + waveform.png', { skip }, async () => {
   assert.equal(opusMeta.audioCodec, 'opus', 'Opus codec match');
 });
 
-test('audio: LUFS-normalized MP3 measures within 1 dB of -16 LUFS', { skip }, async () => {
+test('audio: LUFS-normalized MP3 measures within 1 dB of -16 LUFS', skipOpts(), async () => {
   // Generate a deliberately quiet source so the normalize pass has to
   // actually do work. -36 dBFS sine for 3 seconds.
   const src = join(filesDir, 'quiet-source.wav');
@@ -294,12 +302,19 @@ test('audio: LUFS-normalized MP3 measures within 1 dB of -16 LUFS', { skip }, as
   );
 });
 
-test('gif: tiny.gif → H.264 MP4 + VP9 WebM + poster JPEG', { skip }, async () => {
+test('gif: tiny.gif → H.264 MP4 + VP9 WebM + poster JPEG', skipOpts(), async () => {
+  // image/gif routes through resolveDiskContext to the `images/` tree
+  // (not `files/`), so we also stage the fixture there so the handler
+  // can find it. The seedFromFixture helper writes to filesDir; the
+  // copy below ensures the gif resolves both ways.
   const { id } = seedFromFixture({
     fixture: 'tiny.gif',
     filename: 'sample.gif',
     mime: 'image/gif',
   });
+  const imagesGifDir = join(siteDir, 'static', 'images', '2026', '05');
+  mkdirSync(imagesGifDir, { recursive: true });
+  copyFileSync(join(__dirname, 'fixtures', 'tiny.gif'), join(imagesGifDir, 'sample.gif'));
   const db = queue.__internal.getDb();
   // GIF job — same dispatch path the image handler would use via the
   // follow-up enqueue, just enqueued directly here so we don't have to

@@ -23,11 +23,18 @@ let dbPath;
 let siteDir;
 let staticDir;
 let dataDir;
-let skipReason = null;
+let skipReason = false;
 let Database;
 let publishMediaData;
 
-const skip = () => skipReason;
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 before(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 't80-publish-media-test-'));
@@ -100,7 +107,7 @@ function seedRow(opts) {
   db.close();
 }
 
-test('buildMediaData skips rows whose file is missing', { skip }, () => {
+test('buildMediaData skips rows whose file is missing', skipOpts(), () => {
   // Two rows: one with a real file on disk, one without.
   seedRow({
     id: 'real-1',
@@ -129,7 +136,7 @@ test('buildMediaData skips rows whose file is missing', { skip }, () => {
   assert.equal(result.map['ghost-1'], undefined, 'ghost row is skipped');
 });
 
-test('shapeMediaForData includes the expected fields', { skip }, () => {
+test('shapeMediaForData includes the expected fields', skipOpts(), () => {
   const result = publishMediaData.buildMediaData({ dbPath, siteDir });
   const entry = result.map['real-1'];
   assert.equal(entry.filename, 'aaaaaaaa-hello.png');
@@ -143,7 +150,7 @@ test('shapeMediaForData includes the expected fields', { skip }, () => {
   assert.deepEqual(entry.conversions, { 'webp-640': '/images/2026/05/aaaaaaaa-hello.webp' });
 });
 
-test('writeMediaData writes valid JSON to site/data/media.json', { skip }, () => {
+test('writeMediaData writes valid JSON to site/data/media.json', skipOpts(), () => {
   const result = publishMediaData.writeMediaData({ dbPath, siteDir });
   assert.equal(result.path, join(dataDir, 'media.json'));
   assert.equal(result.count, 1, 'one entry (ghost skipped)');
@@ -155,14 +162,14 @@ test('writeMediaData writes valid JSON to site/data/media.json', { skip }, () =>
   assert.equal(parsed['real-1'].mime_type, 'image/png');
 });
 
-test('includeMissing:true emits ghosts too', { skip }, () => {
+test('includeMissing:true emits ghosts too', skipOpts(), () => {
   const result = publishMediaData.buildMediaData({ dbPath, siteDir, includeMissing: true });
   assert.equal(result.total, 2);
   assert.equal(result.skipped, 0);
   assert.ok(result.map['ghost-1'], 'ghost row included when includeMissing is true');
 });
 
-test('builder copes with a missing database (returns empty map)', { skip }, () => {
+test('builder copes with a missing database (returns empty map)', skipOpts(), () => {
   const result = publishMediaData.buildMediaData({
     dbPath: join(tempDir, 'does-not-exist.db'),
     siteDir,

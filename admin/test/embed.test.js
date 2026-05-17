@@ -28,8 +28,16 @@ import { join } from 'node:path';
 let server;
 let baseUrl;
 let tempDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 let providers;
 let oembed;
@@ -45,8 +53,14 @@ function registerFetch(matcher, handler) {
 function resetFetch() {
   fakeFetchRoutes.clear();
 }
-async function fakeFetch(input) {
+async function fakeFetch(input, init) {
   const url = typeof input === 'string' ? input : input?.url;
+  // Defer to the real fetch for our own test server (127.0.0.1) — the
+  // test's request-under-test goes through the real network stack; only
+  // the upstream provider/oEmbed calls should be intercepted.
+  if (url && (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost'))) {
+    return globalThis.__realFetch(url, init);
+  }
   for (const [match, handler] of fakeFetchRoutes) {
     if (typeof match === 'string' && url === match) return handler(url);
     if (match instanceof RegExp && match.test(url)) return handler(url);
@@ -114,25 +128,25 @@ after(async () => {
 
 // ── Provider matching (pure functions, no DB) ────────────────────
 
-test('pickProvider matches YouTube watch URLs', { skip }, () => {
+test('pickProvider matches YouTube watch URLs', skipOpts(), () => {
   const picked = providers.pickProvider(new URL('https://www.youtube.com/watch?v=abc12345_xy'));
   assert.equal(picked.provider.name, 'youtube');
   assert.equal(picked.match.id, 'abc12345_xy');
 });
 
-test('pickProvider matches youtu.be short URLs', { skip }, () => {
+test('pickProvider matches youtu.be short URLs', skipOpts(), () => {
   const picked = providers.pickProvider(new URL('https://youtu.be/dQw4w9WgXcQ'));
   assert.equal(picked.provider.name, 'youtube');
   assert.equal(picked.match.id, 'dQw4w9WgXcQ');
 });
 
-test('pickProvider matches Vimeo numeric IDs', { skip }, () => {
+test('pickProvider matches Vimeo numeric IDs', skipOpts(), () => {
   const picked = providers.pickProvider(new URL('https://vimeo.com/123456789'));
   assert.equal(picked.provider.name, 'vimeo');
   assert.equal(picked.match.id, '123456789');
 });
 
-test('pickProvider matches Bluesky profile/post', { skip }, () => {
+test('pickProvider matches Bluesky profile/post', skipOpts(), () => {
   const picked = providers.pickProvider(
     new URL('https://bsky.app/profile/alice.bsky.social/post/3xyz'),
   );
@@ -140,7 +154,7 @@ test('pickProvider matches Bluesky profile/post', { skip }, () => {
   assert.equal(picked.match.handle, 'alice.bsky.social');
 });
 
-test('pickProvider matches Mastodon per-instance URL', { skip }, () => {
+test('pickProvider matches Mastodon per-instance URL', skipOpts(), () => {
   const picked = providers.pickProvider(
     new URL('https://mastodon.social/@gargron/123456789012345678'),
   );
@@ -150,7 +164,7 @@ test('pickProvider matches Mastodon per-instance URL', { skip }, () => {
   assert.equal(picked.match.statusId, '123456789012345678');
 });
 
-test('pickProvider matches GitHub Gist', { skip }, () => {
+test('pickProvider matches GitHub Gist', skipOpts(), () => {
   const picked = providers.pickProvider(
     new URL('https://gist.github.com/octocat/aabbccddeeff112233'),
   );
@@ -158,7 +172,7 @@ test('pickProvider matches GitHub Gist', { skip }, () => {
   assert.equal(picked.match.owner, 'octocat');
 });
 
-test('pickProvider matches Spotify track', { skip }, () => {
+test('pickProvider matches Spotify track', skipOpts(), () => {
   const picked = providers.pickProvider(
     new URL('https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh'),
   );
@@ -166,14 +180,14 @@ test('pickProvider matches Spotify track', { skip }, () => {
   assert.equal(picked.match.kind, 'track');
 });
 
-test('pickProvider falls back to generic for unknown hosts', { skip }, () => {
+test('pickProvider falls back to generic for unknown hosts', skipOpts(), () => {
   const picked = providers.pickProvider(new URL('https://example.com/some/article'));
   assert.equal(picked.provider.name, 'generic');
 });
 
 // ── OG scraper unit test (pure parser) ────────────────────────────
 
-test('parseOgFromHtml extracts og:* and twitter:* fields', { skip }, () => {
+test('parseOgFromHtml extracts og:* and twitter:* fields', skipOpts(), () => {
   const html = `<!doctype html><html><head>
     <meta property="og:title" content="The Title">
     <meta property="og:description" content="A description &amp; more">
@@ -188,7 +202,7 @@ test('parseOgFromHtml extracts og:* and twitter:* fields', { skip }, () => {
   assert.equal(og.siteName, 'Example');
 });
 
-test('parseOgFromHtml resolves relative og:image against base', { skip }, () => {
+test('parseOgFromHtml resolves relative og:image against base', skipOpts(), () => {
   const html = `<head>
     <meta property="og:title" content="X">
     <meta property="og:image" content="/img/cover.png">
@@ -197,7 +211,7 @@ test('parseOgFromHtml resolves relative og:image against base', { skip }, () => 
   assert.equal(og.image, 'https://example.com/img/cover.png');
 });
 
-test('parseOgFromHtml falls back to <title> when no og:title', { skip }, () => {
+test('parseOgFromHtml falls back to <title> when no og:title', skipOpts(), () => {
   const html = `<head><title> Just a Title </title></head>`;
   const og = ogScraper.parseOgFromHtml(html, new URL('https://example.com/'));
   assert.equal(og.title, 'Just a Title');
@@ -205,7 +219,7 @@ test('parseOgFromHtml falls back to <title> when no og:title', { skip }, () => {
 
 // ── Route integration: oEmbed path ────────────────────────────────
 
-test('GET /api/embed?url=youtube returns shortcode + MISS', { skip }, async () => {
+test('GET /api/embed?url=youtube returns shortcode + MISS', skipOpts(), async () => {
   resetFetch();
   registerFetch(/youtube\.com\/oembed/, () =>
     Response.json({
@@ -232,7 +246,7 @@ test('GET /api/embed?url=youtube returns shortcode + MISS', { skip }, async () =
   assert.equal(body.title, 'Never Gonna Give You Up');
 });
 
-test('GET /api/embed second identical URL is HIT', { skip }, async () => {
+test('GET /api/embed second identical URL is HIT', skipOpts(), async () => {
   resetFetch();
   // Intentionally do NOT register a fetch — if the cache is bypassed
   // the underlying fetch returns 404 and the test fails.
@@ -246,7 +260,7 @@ test('GET /api/embed second identical URL is HIT', { skip }, async () => {
   assert.equal(body.title, 'Never Gonna Give You Up');
 });
 
-test('GET /api/embed Bluesky returns bluesky shortcode', { skip }, async () => {
+test('GET /api/embed Bluesky returns bluesky shortcode', skipOpts(), async () => {
   resetFetch();
   registerFetch(/embed\.bsky\.app\/oembed/, () =>
     Response.json({
@@ -265,7 +279,7 @@ test('GET /api/embed Bluesky returns bluesky shortcode', { skip }, async () => {
   assert.match(body.shortcode, /handle="alice\.bsky\.social"/);
 });
 
-test('GET /api/embed Mastodon hits per-instance oEmbed', { skip }, async () => {
+test('GET /api/embed Mastodon hits per-instance oEmbed', skipOpts(), async () => {
   resetFetch();
   let calledUrl = null;
   registerFetch(/mastodon\.social\/api\/oembed/, (u) => {
@@ -290,7 +304,7 @@ test('GET /api/embed Mastodon hits per-instance oEmbed', { skip }, async () => {
   );
 });
 
-test('GET /api/embed generic falls back to OG scrape', { skip }, async () => {
+test('GET /api/embed generic falls back to OG scrape', skipOpts(), async () => {
   resetFetch();
   registerFetch(
     'https://example.org/article',
@@ -319,27 +333,27 @@ test('GET /api/embed generic falls back to OG scrape', { skip }, async () => {
 
 // ── 4xx envelope ─────────────────────────────────────────────────
 
-test('GET /api/embed missing url → 400', { skip }, async () => {
+test('GET /api/embed missing url → 400', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/embed`);
   assert.equal(res.status, 400);
 });
 
-test('GET /api/embed http (not https) → 415', { skip }, async () => {
+test('GET /api/embed http (not https) → 415', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/embed?url=${encodeURIComponent('http://example.com/')}`);
   assert.equal(res.status, 415);
 });
 
-test('GET /api/embed private host → 415', { skip }, async () => {
+test('GET /api/embed private host → 415', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/embed?url=${encodeURIComponent('https://localhost/')}`);
   assert.equal(res.status, 415);
 });
 
-test('GET /api/embed malformed URL → 400', { skip }, async () => {
+test('GET /api/embed malformed URL → 400', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/embed?url=notaurl`);
   assert.equal(res.status, 400);
 });
 
-test('GET /api/embed upstream 404 → 404', { skip }, async () => {
+test('GET /api/embed upstream 404 → 404', skipOpts(), async () => {
   resetFetch();
   registerFetch(/vimeo\.com\/api\/oembed/, () => new Response('gone', { status: 404 }));
   const res = await fetch(

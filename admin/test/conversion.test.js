@@ -31,8 +31,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 let tempDir;
 let siteDir;
 let imagesDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 // Lazily-imported modules under test (we cannot `await import()` at top
 // level here because Node test runner expects sync registration of test
@@ -107,10 +115,6 @@ after(async () => {
  * @param root0.height
  */
 function seedMedia({ filename, mime, contents, width = null, height = null }) {
-  const Database = require('better-sqlite3');
-  // ESM in test: require is undefined. Use the already-imported queue's
-  // internal handle.
-  void Database;
   const db = queue.__internal.getDb();
   const id = `media-${Math.random().toString(36).slice(2, 10)}`;
   const hash = `hash${Math.random().toString(36).slice(2, 10)}`.padEnd(16, 'a');
@@ -150,7 +154,7 @@ function makeJpegWithExif(width = 200, height = 150) {
     .toBuffer();
 }
 
-test('queue: enqueueJob flips media.status to processing', { skip }, async () => {
+test('queue: enqueueJob flips media.status to processing', skipOpts(), async () => {
   const buf = await sharp({
     create: { width: 100, height: 100, channels: 3, background: { r: 50, g: 50, b: 50 } },
   })
@@ -166,7 +170,7 @@ test('queue: enqueueJob flips media.status to processing', { skip }, async () =>
   assert.equal(row.status, 'processing');
 });
 
-test('image: PNG generates webp + avif at 4 widths + thumbnail', { skip }, async () => {
+test('image: PNG generates webp + avif at 4 widths + thumbnail', skipOpts(), async () => {
   const wide = await sharp({
     create: { width: 2000, height: 1200, channels: 3, background: { r: 80, g: 160, b: 200 } },
   })
@@ -209,7 +213,7 @@ test('image: PNG generates webp + avif at 4 widths + thumbnail', { skip }, async
   assert.ok(existsSync(diskPath), 'original PNG preserved');
 });
 
-test('image: small source skips widths above source width', { skip }, async () => {
+test('image: small source skips widths above source width', skipOpts(), async () => {
   const small = await sharp({
     create: { width: 400, height: 300, channels: 3, background: { r: 50, g: 50, b: 50 } },
   })
@@ -228,7 +232,7 @@ test('image: small source skips widths above source width', { skip }, async () =
   assert.ok(!conversions['webp-1920'], '1920 skipped');
 });
 
-test('image: EXIF stripped from web variants', { skip }, async () => {
+test('image: EXIF stripped from web variants', skipOpts(), async () => {
   const jpg = await makeJpegWithExif(800, 600);
   // Sanity check: the source JPEG contains the marker.
   assert.ok(jpg.includes(Buffer.from('T80-FIXTURE-EXIF-MARKER')), 'fixture has EXIF marker');
@@ -252,7 +256,7 @@ test('image: EXIF stripped from web variants', { skip }, async () => {
   assert.ok(!variantMeta.exif, 'no EXIF metadata block on variant');
 });
 
-test('image: SVG sanitization overwrites the on-disk file', { skip }, async () => {
+test('image: SVG sanitization overwrites the on-disk file', skipOpts(), async () => {
   const unsafe = readFileSync(join(__dirname, 'fixtures', 'unsafe.svg'), 'utf8');
   assert.ok(unsafe.includes('<script'), 'fixture has script tag');
   // Write the SVG into the image dir as if it were uploaded.
@@ -281,7 +285,7 @@ test('image: SVG sanitization overwrites the on-disk file', { skip }, async () =
   assert.ok(cleanedSafe.includes('<circle'), 'circle element preserved');
 });
 
-test('image: HEIC/HEIF → JPEG fallback (libheif available)', { skip }, async () => {
+test('image: HEIC/HEIF → JPEG fallback (libheif available)', skipOpts(), async () => {
   // sharp's bundled libheif ships without HEVC (patent), but AV1-coded
   // HEIF works and registers as format='heif' through the same code
   // path, so we exercise the fallback writer with that.
@@ -313,19 +317,24 @@ test('image: HEIC/HEIF → JPEG fallback (libheif available)', { skip }, async (
   assert.equal(jpgMeta.format, 'jpeg');
 });
 
-test('queue: failed job marks media.status=failed after max attempts', { skip }, async () => {
-  // Seed a job whose handler will throw. We do this by registering a
-  // type that doesn't exist — `notImplemented` for 'video' is our test
-  // vehicle.
+test('queue: failed job marks media.status=failed after max attempts', skipOpts(), async () => {
+  // Seed a job whose handler will throw. We pick a type that has no
+  // registered handler, which triggers the "No handler registered for
+  // type=…" failure path inside the worker — that path is what we want to
+  // verify exhausts retries and flips media.status to 'failed'.
   const db = queue.__internal.getDb();
   const buf = await sharp({
     create: { width: 100, height: 100, channels: 3, background: { r: 0, g: 0, b: 0 } },
   })
     .png()
     .toBuffer();
-  const { id } = seedMedia({ filename: 'will-fail.png', mime: 'image/png', contents: buf });
+  const { id } = seedMedia({
+    filename: 'will-fail.bin',
+    mime: 'application/octet-stream',
+    contents: buf,
+  });
   // Reduce max_attempts to 1 so we can exhaust it in one drain.
-  queue.enqueueJob(id, 'video', { maxAttempts: 1 });
+  queue.enqueueJob(id, '__unregistered__', { maxAttempts: 1 });
   await workerMod.drainOnce({ concurrency: 1 });
   const row = db.prepare('SELECT * FROM media WHERE id = ?').get(id);
   assert.equal(row.status, 'failed', 'media marked failed after max_attempts exhausted');
@@ -333,10 +342,10 @@ test('queue: failed job marks media.status=failed after max attempts', { skip },
     .prepare('SELECT * FROM conversion_jobs WHERE media_id = ? ORDER BY queued_at DESC')
     .get(id);
   assert.equal(job.status, 'failed');
-  assert.ok(job.error && job.error.includes('not yet implemented'), 'error message stored');
+  assert.ok(job.error && job.error.length > 0, 'error message stored');
 });
 
-test('queue: retry resets attempt and re-runs', { skip }, async () => {
+test('queue: retry resets attempt and re-runs', skipOpts(), async () => {
   const db = queue.__internal.getDb();
   // Find the failed row from the previous test and retry it. Since our
   // 'video' handler always throws, retrying just re-fails — but the
@@ -355,7 +364,7 @@ test('queue: retry resets attempt and re-runs', { skip }, async () => {
   assert.equal(mediaRow.status, 'processing', 'media flipped back to processing');
 });
 
-test('queue: retry endpoint via HTTP', { skip }, async () => {
+test('queue: retry endpoint via HTTP', skipOpts(), async () => {
   // Stand up a tiny express app exposing /api/media so the retry route
   // (which is what an admin user actually hits) is exercised.
   const app = express();
@@ -382,22 +391,26 @@ test('queue: retry endpoint via HTTP', { skip }, async () => {
   }
 });
 
-test('queue: claimNext is atomic — second caller sees the row already gone', { skip }, async () => {
-  const db = queue.__internal.getDb();
-  // Wipe any pending jobs so we can control the test set deterministically.
-  db.prepare("DELETE FROM conversion_jobs WHERE status = 'pending'").run();
+test(
+  'queue: claimNext is atomic — second caller sees the row already gone',
+  skipOpts(),
+  async () => {
+    const db = queue.__internal.getDb();
+    // Wipe any pending jobs so we can control the test set deterministically.
+    db.prepare("DELETE FROM conversion_jobs WHERE status = 'pending'").run();
 
-  const buf = await sharp({
-    create: { width: 50, height: 50, channels: 3, background: { r: 10, g: 20, b: 30 } },
-  })
-    .png()
-    .toBuffer();
-  const { id } = seedMedia({ filename: 'race.png', mime: 'image/png', contents: buf });
-  queue.enqueueJob(id, 'image');
-  const a = queue.claimNext();
-  const b = queue.claimNext();
-  assert.ok(a, 'first claim returns a row');
-  assert.equal(b, null, 'second claim finds nothing (atomic dequeue)');
-  // Don't actually run the handler — just mark done to clean up.
-  queue.markDone(a.id, {});
-});
+    const buf = await sharp({
+      create: { width: 50, height: 50, channels: 3, background: { r: 10, g: 20, b: 30 } },
+    })
+      .png()
+      .toBuffer();
+    const { id } = seedMedia({ filename: 'race.png', mime: 'image/png', contents: buf });
+    queue.enqueueJob(id, 'image');
+    const a = queue.claimNext();
+    const b = queue.claimNext();
+    assert.ok(a, 'first claim returns a row');
+    assert.equal(b, null, 'second claim finds nothing (atomic dequeue)');
+    // Don't actually run the handler — just mark done to clean up.
+    queue.markDone(a.id, {});
+  },
+);

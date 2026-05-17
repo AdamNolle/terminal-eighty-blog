@@ -113,7 +113,16 @@ export function groupBySlug(rows) {
       content: r.content,
       received_at: r.received_at,
     };
-    const key = `${r.type}s`;
+    // 'reply' → 'replies' (irregular plural); other types pluralize
+    // cleanly. Keep this in sync with the feed route in webmentions.js.
+    const bucketMap = {
+      reply: 'replies',
+      like: 'likes',
+      repost: 'reposts',
+      bookmark: 'bookmarks',
+      mention: 'mentions',
+    };
+    const key = bucketMap[r.type] || 'mentions';
     if (Array.isArray(bucket[key])) {
       bucket[key].push(shaped);
     } else {

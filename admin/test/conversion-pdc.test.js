@@ -35,10 +35,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 let tempDir;
 let siteDir;
 let filesDir;
-let skipReason = null;
-let pdfSkipReason = null;
-const skip = () => skipReason;
-const skipPdf = () => skipReason || pdfSkipReason;
+let skipReason = false;
+let pdfSkipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
+const skipPdfOpts = () => ({
+  get skip() {
+    return skipReason || pdfSkipReason;
+  },
+});
 
 let queue;
 let workerMod;
@@ -118,7 +130,7 @@ function seedFromFixture({ fixture, filename, mime }) {
   return { id, diskPath, hash };
 }
 
-test('pdf: tiny.pdf → cover JPG + thumb JPG + page_count', { skip: skipPdf }, async () => {
+test('pdf: tiny.pdf → cover JPG + thumb JPG + page_count', skipPdfOpts(), async () => {
   const { id } = seedFromFixture({
     fixture: 'tiny.pdf',
     filename: 'sample-doc.pdf',
@@ -147,7 +159,7 @@ test('pdf: tiny.pdf → cover JPG + thumb JPG + page_count', { skip: skipPdf }, 
   }
 });
 
-test('code: sample.js → preview-html + preview-txt with shiki render', { skip }, async () => {
+test('code: sample.js → preview-html + preview-txt with shiki render', skipOpts(), async () => {
   const { id, diskPath } = seedFromFixture({
     fixture: 'sample.js',
     filename: 'snippet.js',
@@ -183,7 +195,7 @@ test('code: sample.js → preview-html + preview-txt with shiki render', { skip 
   assert.ok(html.includes('add'), 'source token "add" present');
 });
 
-test('code: sample.py → language=python + correct line count', { skip }, async () => {
+test('code: sample.py → language=python + correct line count', skipOpts(), async () => {
   const { id, diskPath } = seedFromFixture({
     fixture: 'sample.py',
     filename: 'snippet.py',
@@ -207,7 +219,7 @@ test('code: sample.py → language=python + correct line count', { skip }, async
   assert.equal(conversions.char_count, raw.length);
 });
 
-test('archive: sample.zip → tree.json with correct entries', { skip }, async () => {
+test('archive: sample.zip → tree.json with correct entries', skipOpts(), async () => {
   const { id } = seedFromFixture({
     fixture: 'sample.zip',
     filename: 'pkg.zip',
@@ -246,7 +258,7 @@ test('archive: sample.zip → tree.json with correct entries', { skip }, async (
   }
 });
 
-test('code: isCodeFile extension allowlist', { skip }, async () => {
+test('code: isCodeFile extension allowlist', skipOpts(), async () => {
   const { isCodeFile } = await import('../src/services/conversion/index.js');
   assert.equal(isCodeFile('foo.js'), true);
   assert.equal(isCodeFile('FOO.PY'), true, 'case-insensitive');
