@@ -362,6 +362,53 @@
     });
   }
 
+  // ── Inbox widget (Phase 8.5) ──────────────────────────────
+  async function loadInbox() {
+    const host = $('inbox-grid');
+    if (!host) return;
+    try {
+      const [comments, blocks] = await Promise.all([
+        TE.fetchJSON('/api/comments?status=all&page=1&limit=200').catch((err) => {
+          if (err.status === 401) throw err;
+          return { items: [], total: 0, warning: err.message };
+        }),
+        TE.fetchJSON('/api/comments/blocks').catch(() => ({ items: [] })),
+      ]);
+      const items = Array.isArray(comments?.items) ? comments.items : [];
+      const since = Date.now() - 24 * 3600 * 1000;
+      const last24 = items.filter((c) => c.source === 'remark42' && c.ts > since).length;
+      const pendingWm = items.filter(
+        (c) => c.source === 'webmention' && c.status === 'pending',
+      ).length;
+      const totalWm = items.filter((c) => c.source === 'webmention').length;
+      const spam = items.filter((c) => c.status === 'spam').length;
+
+      const set = (id, val, hasNew) => {
+        const el = $(id);
+        if (!el) return;
+        el.textContent = String(val);
+        el.classList.toggle('has-new', Boolean(hasNew));
+      };
+      set('inbox-comments-24h', last24, last24 > 0);
+      set('inbox-comments-total', `${items.filter((c) => c.source === 'remark42').length} total`);
+      set('inbox-webmentions-pending', pendingWm, pendingWm > 0);
+      set('inbox-webmentions-total', `${totalWm} total`);
+      set('inbox-spam', spam);
+      set('inbox-blocked', Array.isArray(blocks?.items) ? blocks.items.length : 0);
+    } catch (err) {
+      if (err.status === 401) return;
+      console.warn('inbox widget failed', err);
+      const set = (id, val) => {
+        const el = $(id);
+        if (el) el.textContent = val;
+      };
+      set('inbox-comments-24h', '—');
+      set('inbox-webmentions-pending', '—');
+      set('inbox-spam', '—');
+      set('inbox-blocked', '—');
+    }
+  }
+
   // ── Boot ──────────────────────────────────────────────────
   function boot() {
     wirePostsUi();
@@ -370,6 +417,7 @@
 
     loadPosts();
     loadHealth();
+    loadInbox();
     healthTimer = setInterval(loadHealth, 5000);
 
     // Pause polling when the tab is hidden (saves a request loop)

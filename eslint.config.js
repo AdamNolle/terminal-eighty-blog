@@ -198,6 +198,27 @@ export default [
     },
   },
 
+  // Phase 8.5 maintenance script — top-level Node ESM CLI under scripts/.
+  // Picks up scripts/*.mjs only (no recursion into scripts/dev/).
+  {
+    files: ['scripts/*.mjs'],
+    plugins: { security, n },
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
+      ...sharedRules,
+      'n/no-missing-import': 'off',
+      'n/no-unpublished-import': 'off',
+      'jsdoc/require-jsdoc': 'off',
+      'jsdoc/require-param-description': 'off',
+      'jsdoc/require-returns-description': 'off',
+      'jsdoc/tag-lines': 'off',
+    },
+  },
+
   // Phase 5d dev scripts — Node ESM CLI tools under scripts/dev/.
   // Test files in scripts/dev/__tests__/ are picked up by the Vitest
   // block below via the explicit pattern; this entry covers the

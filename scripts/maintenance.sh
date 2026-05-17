@@ -37,8 +37,16 @@ fi
 # trigger; this catches drift if the cron was off.
 DUMP_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dump-webmentions.sh"
 if [ -x "$DUMP_SCRIPT" ]; then
-  echo "[5/5] Running webmention dumper..."
+  echo "[5/6] Running webmention dumper..."
   "$DUMP_SCRIPT" || echo "webmention dump failed (continuing)"
+fi
+
+# 6. Email comment-activity digest (Phase 8.5).
+# Self-noops if SMTP_HOST is unset, so it's safe to keep enabled.
+DIGEST_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/email-digest.mjs"
+if [ -f "$DIGEST_SCRIPT" ]; then
+  echo "[6/6] Sending email digest (if SMTP configured)..."
+  node "$DIGEST_SCRIPT" || echo "email digest failed (continuing)"
 fi
 
 echo "Maintenance completed successfully at $(date)"

@@ -36,6 +36,11 @@ import {
   publicRouter as webmentionPublicRoutes,
   adminRouter as webmentionAdminRoutes,
 } from './src/routes/webmentions.js';
+// Phase 8.5: unified comment moderation surface. Proxies Remark42's
+// admin API + folds in pending webmentions so the CMS user manages
+// every comment from one place.
+import commentsRoutes from './src/routes/comments.js';
+import * as remark42Poller from './src/services/remark42-poller.js';
 // Phase 4: tiny migration runner — applies any pending DDL in
 // `src/db/migrations/` (auth tables, media table, …) before we serve
 // the first request. Safe to call on every boot; already-applied
@@ -74,6 +79,20 @@ if (process.env.CONVERSION_WORKER !== 'off') {
     bindShutdownSignals();
   } catch (workerErr) {
     console.error('[conversion-worker] failed to start:', workerErr);
+  }
+}
+
+// Phase 8.5: launch the Remark42 poller. It self-skips when Remark42
+// isn't configured (no REMARK42_URL / REMARK42_SITE_ID) so dev sessions
+// without docker up don't see a hot error loop.
+if (process.env.REMARK42_POLLER !== 'off') {
+  try {
+    remark42Poller.start();
+    const drainPoller = () => remark42Poller.stop();
+    process.once('SIGTERM', drainPoller);
+    process.once('SIGINT', drainPoller);
+  } catch (pollerErr) {
+    console.error('[remark42-poller] failed to start:', pollerErr);
   }
 }
 
@@ -181,6 +200,11 @@ app.use('/api/embed', embedRoutes);
 // Phase 8 — admin moderation surface for inbound webmentions. Sits
 // behind the same session auth as /api/posts etc.
 app.use('/api/webmentions', webmentionAdminRoutes);
+// Phase 8.5 — unified Remark42 + webmention moderation. Exposes a
+// single /api/comments surface so the admin UI doesn't need to know
+// which backend a row came from. Includes an SSE channel
+// (/api/comments/stream) for real-time updates.
+app.use('/api/comments', commentsRoutes);
 // Templates static mount — read-only access to admin/templates/*.md so
 // the "New Post" picker can fetch each scaffold.
 app.use('/api/templates', express.static(join(__dirname, 'templates'), { fallthrough: false }));

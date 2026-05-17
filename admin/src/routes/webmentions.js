@@ -53,6 +53,7 @@ import { mkdirSync } from 'fs';
 
 import { parseSource, normaliseUrl } from '../services/microformats.js';
 import { logActivity } from '../services/activity.js';
+import { broadcast as sseBroadcast } from '../services/sse.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -259,6 +260,20 @@ export async function validateMention(id) {
       stored,
       id,
     );
+
+  // Phase 8.5: tell the admin UI that this row is fully validated.
+  // Lets the moderation view re-render the row with its actual author
+  // / content / type without a refresh.
+  try {
+    sseBroadcast('webmentions', 'webmention-validated', {
+      id,
+      status: autoApprove ? 'approved' : 'pending',
+      type: parsed.type,
+      author: parsed.author?.name || null,
+    });
+  } catch (_) {
+    /* non-critical */
+  }
 }
 
 // ── Public router (no auth) — mounted at /webmention ────────────────
@@ -299,6 +314,21 @@ publicRouter.post('/', async (req, res) => {
     target: v.target,
     meta: { source: v.source, id },
   });
+
+  // Phase 8.5: push to the admin SSE channel so the moderation UI can
+  // toast + bump the unread badge without polling.
+  try {
+    sseBroadcast('webmentions', 'webmention-new', {
+      id,
+      source: v.source,
+      target: v.target,
+      status: 'pending',
+      ts: Date.now(),
+    });
+  } catch (err) {
+    // SSE is non-critical — never fail the inbound POST over a broadcast hiccup.
+    console.warn('[webmention] sse broadcast failed:', err && err.message);
+  }
 
   const statusUrl = `/webmention/${id}`;
   res.setHeader('Location', statusUrl);
