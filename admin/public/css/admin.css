@@ -1327,13 +1327,48 @@ body[data-page="login"] {
   .sec-title {
     font-size: 28px;
   }
+  /* Phase 5e mobile: collapse posts table to single-column cards;
+     ensure ≥44×44 tap targets per WCAG AA. The original Phase 2
+     two-column layout (title + date) is replaced with a single
+     title-only stack — date and tags drop out at <800 px. */
+  .row-grid {
+    grid-template-columns: 1fr auto;
+  }
   .row-grid .r-link {
-    grid-template-columns: 28px minmax(0, 1fr) 80px;
+    grid-template-columns: 28px minmax(0, 1fr);
     gap: 12px;
   }
   .row-grid .r-link .r-date,
   .row-grid .r-link .r-status {
     display: none;
+  }
+  .btn,
+  .btn-mini {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .btn-mini {
+    padding: 8px 10px;
+  }
+  .sec-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+/* Phase 5e — extra-narrow (375 px) tweaks for the mobile editor flow */
+@media (max-width: 480px) {
+  .stage {
+    padding: 12px 10px;
+  }
+  .sec-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .topbar-actions .btn {
+    padding: 8px 10px;
+    font-size: 11px;
   }
 }
 

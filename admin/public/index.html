@@ -17,6 +17,10 @@
     <link rel="stylesheet" href="/css/admin.css" />
     <link rel="stylesheet" href="/css/dashboard.css" />
     <link rel="stylesheet" href="/css/media.css" />
+    <link rel="stylesheet" href="/css/settings.css" />
+    <link rel="stylesheet" href="/css/taxonomies.css" />
+    <link rel="stylesheet" href="/css/redirects.css" />
+    <link rel="stylesheet" href="/css/activity.css" />
     <!-- WebAuthn browser library (CDN — passkey registration). Wrapped
        in try/catch in auth.js so an ad-blocker doesn't crash the page. -->
     <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
@@ -55,6 +59,9 @@
           <a class="side-item" href="/index.html#media" data-route="media">
             <span class="ico" aria-hidden="true">▦</span><span>Media</span><span></span>
           </a>
+          <a class="side-item" href="/index.html#tags" data-route="tags">
+            <span class="ico" aria-hidden="true">#</span><span>Tags</span><span></span>
+          </a>
           <a
             class="side-item"
             href="https://comments.terminaleighty.com/web/"
@@ -67,8 +74,14 @@
 
         <nav class="side-group" aria-label="System">
           <div class="side-group-label">System</div>
-          <a class="side-item" href="/index.html#stats" data-route="stats">
-            <span class="ico" aria-hidden="true">∿</span><span>Stats</span><span></span>
+          <a class="side-item" href="/index.html#activity" data-route="activity">
+            <span class="ico" aria-hidden="true">∿</span><span>Activity</span><span></span>
+          </a>
+          <a class="side-item" href="/index.html#redirects" data-route="redirects">
+            <span class="ico" aria-hidden="true">↪</span><span>Redirects</span><span></span>
+          </a>
+          <a class="side-item" href="/index.html#shortcodes" data-route="shortcodes">
+            <span class="ico" aria-hidden="true">⟨⟩</span><span>Shortcodes</span><span></span>
           </a>
           <a class="side-item" href="/index.html#settings" data-route="settings">
             <span class="ico" aria-hidden="true">◐</span><span>Settings</span><span></span>
@@ -133,7 +146,7 @@
               >View site →</a
             >
             <button type="button" class="btn" id="btn-publish">Publish site</button>
-            <a class="btn solid" href="/editor.html">+ New Post</a>
+            <button type="button" class="btn solid" id="btn-new-post">+ New Post</button>
             <button
               type="button"
               class="btn ghost"
@@ -214,6 +227,10 @@
                     placeholder="Filter by title, slug, or tag…"
                     autocomplete="off"
                   />
+                </label>
+                <label class="posts-selectall">
+                  <input type="checkbox" id="posts-select-all" />
+                  <span>Select all</span>
                 </label>
                 <span class="count" id="posts-visible">—</span>
               </div>
@@ -303,6 +320,24 @@
                     (Remark42).
                   </p>
                 </div>
+              </div>
+            </div>
+
+            <!-- Phase 5e: recent activity widget -->
+            <div
+              class="panel"
+              id="activity-widget"
+              style="margin-top: 24px"
+              aria-label="Recent activity"
+            >
+              <div class="panel-head">
+                <span class="panel-title"><span class="ind">▾</span>Recent activity</span>
+                <div class="panel-head-r">
+                  <a class="btn-mini" href="/index.html#activity">View all →</a>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div id="activity-widget-body" class="te-activity-table">Loading…</div>
               </div>
             </div>
           </div>
@@ -444,8 +479,159 @@
             </div>
           </div>
           <!-- ============ /MEDIA LIBRARY VIEW ============ -->
+
+          <!-- ============ SETTINGS VIEW (Phase 5e) ============ -->
+          <div id="view-settings" hidden>
+            <div class="sec-head">
+              <div>
+                <h1 class="sec-title">Settings</h1>
+                <div class="sec-sub">Site identity, social, analytics, author profile.</div>
+              </div>
+              <div class="sec-actions">
+                <button type="button" class="btn primary" id="btn-save-settings">Save</button>
+              </div>
+            </div>
+            <div id="settings-form" class="te-form-grid">Loading…</div>
+          </div>
+
+          <!-- ============ TAGS VIEW (Phase 5e) ============ -->
+          <div id="view-tags" hidden>
+            <div class="sec-head">
+              <div>
+                <h1 class="sec-title">Tags</h1>
+                <div class="sec-sub">Rename, merge, or remove tags across every post.</div>
+              </div>
+              <div class="sec-actions"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <span class="panel-title"><span class="ind">▾</span>Tag index</span>
+                <span class="panel-head-r" id="tags-total">—</span>
+              </div>
+              <div id="tags-table" class="te-tag-table">Loading…</div>
+            </div>
+          </div>
+
+          <!-- ============ REDIRECTS VIEW (Phase 5e) ============ -->
+          <div id="view-redirects" hidden>
+            <div class="sec-head">
+              <div>
+                <h1 class="sec-title">Redirects</h1>
+                <div class="sec-sub">
+                  Site-wide URL forwards. Emitted as meta-refresh pages at build time.
+                </div>
+              </div>
+              <div class="sec-actions">
+                <button type="button" class="btn primary" id="btn-redirect-new">
+                  + Add redirect
+                </button>
+              </div>
+            </div>
+            <div class="panel">
+              <div id="redirects-table" class="te-redirects-table">Loading…</div>
+            </div>
+          </div>
+
+          <!-- ============ ACTIVITY VIEW (Phase 5e) ============ -->
+          <div id="view-activity" hidden>
+            <div class="sec-head">
+              <div>
+                <h1 class="sec-title">Activity</h1>
+                <div class="sec-sub">Every CMS mutation, newest first.</div>
+              </div>
+              <div class="sec-actions">
+                <button type="button" class="btn" id="btn-activity-refresh">Refresh</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div id="activity-table" class="te-activity-table">Loading…</div>
+            </div>
+          </div>
+
+          <!-- ============ SHORTCODES VIEW (Phase 5e) ============ -->
+          <div id="view-shortcodes" hidden>
+            <div class="sec-head">
+              <div>
+                <h1 class="sec-title">Shortcodes</h1>
+                <div class="sec-sub">
+                  Reference of every Hugo shortcode you can drop into a post.
+                </div>
+              </div>
+              <div class="sec-actions"></div>
+            </div>
+            <div class="panel">
+              <div id="shortcodes-list">Loading…</div>
+            </div>
+          </div>
         </div>
       </main>
+    </div>
+
+    <!-- Posts bulk action bar -->
+    <div
+      class="te-media-bulk-bar"
+      id="posts-bulk-bar"
+      role="region"
+      aria-label="Bulk post actions"
+      hidden
+    >
+      <span><b id="posts-bulk-count">0</b> selected</span>
+      <button type="button" class="btn" data-bulk-action="publish">Publish</button>
+      <button type="button" class="btn" data-bulk-action="unpublish">Draft</button>
+      <button type="button" class="btn" id="btn-bulk-add-tag">+ Tag</button>
+      <button type="button" class="btn danger" data-bulk-action="delete">Delete</button>
+      <button type="button" class="btn ghost" id="btn-bulk-clear">Clear</button>
+    </div>
+
+    <!-- New Post template picker -->
+    <div
+      class="modal"
+      id="template-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      aria-labelledby="template-modal-title"
+    >
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3 id="template-modal-title">[ Pick a template ]</h3>
+          <button
+            type="button"
+            class="btn ghost"
+            data-modal-close="template-modal"
+            aria-label="Cancel"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <ul class="te-template-list">
+            <li>
+              <a href="/editor.html"><b>Blank</b><span>Start from scratch.</span></a>
+            </li>
+            <li>
+              <a href="/editor.html?template=technical"
+                ><b>Technical</b><span>Problem → fix → why.</span></a
+              >
+            </li>
+            <li>
+              <a href="/editor.html?template=opinion"
+                ><b>Opinion</b><span>Take, argument, counter.</span></a
+              >
+            </li>
+            <li>
+              <a href="/editor.html?template=link"
+                ><b>Link</b><span>Bookmark with a paragraph.</span></a
+              >
+            </li>
+            <li>
+              <a href="/editor.html?template=photo"
+                ><b>Photo essay</b><span>Gallery + notes.</span></a
+              >
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
 
     <!-- Bulk action bar (shown by media.js when items are selected) -->
@@ -557,5 +743,13 @@ Allowed commands run with timeout=15s. Type a command and press Enter.
     <script src="/js/dashboard.js"></script>
     <script src="/js/dropzone.js"></script>
     <script src="/js/media.js"></script>
+    <!-- Phase 5e -->
+    <script src="/js/posts-bulk.js"></script>
+    <script src="/js/settings.js"></script>
+    <script src="/js/taxonomies.js"></script>
+    <script src="/js/redirects.js"></script>
+    <script src="/js/activity.js"></script>
+    <script src="/js/shortcodes.js"></script>
+    <script src="/js/router.js"></script>
   </body>
 </html>

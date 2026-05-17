@@ -1702,3 +1702,68 @@
   border-radius: 1px;
   box-shadow: 0 0 4px var(--accent-glow, transparent);
 }
+
+/* ============================================================
+   Phase 5e — Mobile authoring
+   Below 768 px we collapse the rich toolbar to a sticky bottom
+   action bar so writers on a phone still have one-tap access to
+   the heavy-rotation block actions (bold, italic, link, list, H2).
+   Tap targets are bumped to 44 × 44 per WCAG.
+   ============================================================ */
+@media (max-width: 768px) {
+  .te-editor-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .te-editor-toolbar-rich {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 80;
+    background: var(--bg-elev);
+    border-top: 1px solid var(--glass-border);
+    padding: 6px 10px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.35);
+  }
+  .te-editor-toolbar-rich .te-tb-divider {
+    margin: 0 4px;
+  }
+  .te-tb-btn {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 14px;
+  }
+  .ed-body {
+    /* Leave room for the sticky toolbar so the cursor isn't hidden */
+    padding-bottom: 80px;
+  }
+}
+
+/* Phase 5e — editor sidebar additions */
+.ed-publish-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+#preview-link-out {
+  margin-top: 8px;
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--fg);
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+}

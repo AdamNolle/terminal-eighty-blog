@@ -146,13 +146,40 @@ export async function getDockerStats() {
 
 // Check last backup status via git log in backup repo
 export async function getBackupStatus() {
+  // Phase 5e: prefer the marker file written by scripts/backup.sh.
+  // The dashboard widget surfaces "Last backup: 3h ago" (green) or a
+  // red dot if > 36h old.
   try {
-    // Try to read status from a potential local file or git log
-    // This is a placeholder that assumes a status file is written by backup.sh
+    const { readFileSync, statSync, existsSync } = await import('fs');
+    const { join } = await import('path');
+    const { homedir } = await import('os');
+    const markerDir = process.env.TE_STATE_DIR || join(homedir(), '.terminal-eighty');
+    const marker = join(markerDir, '.last_backup');
+    if (existsSync(marker)) {
+      const iso = readFileSync(marker, 'utf-8').trim();
+      const ts = Date.parse(iso);
+      const st = statSync(marker);
+      const lastMs = Number.isFinite(ts) ? ts : st.mtimeMs;
+      const ageMs = Date.now() - lastMs;
+      const ageHours = Math.round(ageMs / 3600000);
+      let status = 'ok';
+      if (ageHours > 36) status = 'stale';
+      else if (ageHours > 24) status = 'warn';
+      return {
+        last_iso: new Date(lastMs).toISOString(),
+        age_hours: ageHours,
+        status,
+        log: `Last backup: ${ageHours <= 1 ? 'less than 1h' : ageHours + 'h'} ago`,
+      };
+    }
+  } catch (_err) {
+    /* fall through to legacy log path */
+  }
+  try {
     const { stdout } = await execAsync(
       'cat /var/log/terminal-eighty-backup.log || echo "No backup run yet"',
     );
-    return { log: stdout.trim() };
+    return { log: stdout.trim(), status: 'unknown' };
   } catch (_err) {
     return { status: 'unknown', message: 'Could not read backup logs' };
   }

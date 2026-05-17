@@ -9,7 +9,7 @@
     "dev": "node --watch server.js",
     "build:editor": "NODE_ENV=production node scripts/build-editor.mjs",
     "dev:editor": "node scripts/build-editor.mjs --watch",
-    "test": "node --test --test-reporter spec test/auth.test.js test/media.test.js test/conversion.test.js test/conversion-av.test.js test/conversion-pdc.test.js",
+    "test": "node --test --test-reporter spec test/auth.test.js test/media.test.js test/conversion.test.js test/conversion-av.test.js test/conversion-pdc.test.js test/posts-bulk.test.js test/settings.test.js test/taxonomies.test.js test/redirects.test.js test/activity.test.js test/scheduler.test.js test/toml-roundtrip.test.js",
     "lint": "cd .. && npm run lint:js -- admin/"
   },
   "dependencies": {
@@ -18,6 +18,7 @@
     "@codemirror/search": "^6.7.0",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.43.0",
+    "@iarna/toml": "^2.2.5",
     "@simplewebauthn/server": "^13.1.1",
     "@tiptap/core": "^3.23.4",
     "@tiptap/extension-code-block-lowlight": "^3.23.4",

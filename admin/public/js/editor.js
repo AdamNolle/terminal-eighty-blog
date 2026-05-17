@@ -285,13 +285,110 @@
     try {
       const posts = await TE.fetchJSON('/api/posts');
       const set = new Set();
-      (posts || []).forEach((p) => (p.tags || []).forEach((t) => set.add(t)));
+      const seriesSet = new Set();
+      (posts || []).forEach((p) => {
+        (p.tags || []).forEach((t) => set.add(t));
+        if (p.series) seriesSet.add(p.series);
+      });
       tagDataList.innerHTML = Array.from(set)
         .sort()
         .map((t) => `<option value="${TE.escape(t)}">`)
         .join('');
+      const seriesDataList = $('series-suggestions');
+      if (seriesDataList) {
+        seriesDataList.innerHTML = Array.from(seriesSet)
+          .sort()
+          .map((s) => `<option value="${TE.escape(s)}">`)
+          .join('');
+      }
     } catch (_) {
       /* non-fatal */
+    }
+  }
+
+  // Phase 5e: preview-link button
+  async function generatePreviewLink() {
+    if (!currentFile) {
+      TE.toast('Save the post first.', 'warn');
+      return;
+    }
+    const btn = $('btn-preview-link');
+    const out = $('preview-link-out');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await TE.fetchJSON(`/api/posts/${encodeURIComponent(currentFile)}/preview`, {
+        method: 'POST',
+        body: '{}',
+      });
+      if (out) {
+        out.value = res.url || '';
+        out.select?.();
+      }
+      try {
+        await navigator.clipboard.writeText(res.url || '');
+        TE.toast('Preview link copied.');
+      } catch (_) {
+        TE.toast('Preview link generated.');
+      }
+    } catch (err) {
+      TE.toast(err.message || 'Preview failed.', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // Phase 5e: pick a cover image from the media library (simple prompt
+  // fallback when the modal picker isn't wired). Future iterations can
+  // replace this with the full media library modal.
+  async function pickCover() {
+    try {
+      const list = await TE.fetchJSON('/api/media?type=image&limit=50');
+      const items = list.items || [];
+      if (!items.length) {
+        TE.toast('No images in library yet.', 'warn');
+        return;
+      }
+      const choices = items
+        .slice(0, 20)
+        .map((m, i) => `${i + 1}. ${m.original_name || m.filename} (${m.url})`)
+        .join('\n');
+      const idx = Number(
+        window.prompt(`Pick an image (1-${Math.min(items.length, 20)}):\n\n${choices}`, '1'),
+      );
+      if (!Number.isFinite(idx) || idx < 1 || idx > items.length) return;
+      const m = items[idx - 1];
+      const coverEl = $('post-cover');
+      const altEl = $('post-cover-alt');
+      if (coverEl) coverEl.value = m.url || '';
+      if (altEl && !altEl.value) altEl.value = m.original_name || '';
+      updateCoverPreview();
+      markDirty();
+    } catch (err) {
+      TE.toast(err.message || 'Library load failed.', 'error');
+    }
+  }
+
+  // Phase 5e: load a template into a fresh editor when ?template=name.
+  async function maybeLoadTemplate() {
+    const t = urlParams.get('template');
+    if (!t || currentFile) return;
+    try {
+      const res = await fetch(`/api/templates/${encodeURIComponent(t)}.md`, {
+        credentials: 'same-origin',
+      });
+      if (!res.ok) return;
+      const raw = await res.text();
+      const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+      if (m) {
+        // Skip front-matter (template's placeholder), keep body
+        bodyEl.value = m[2] || '';
+      } else {
+        bodyEl.value = raw;
+      }
+      updateMetrics();
+      markDirty();
+    } catch (_) {
+      /* template missing — leave body blank */
     }
   }
 
@@ -311,6 +408,8 @@
         d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
         dateEl.value = d.toISOString().slice(0, 16);
       }
+      // Phase 5e additions
+      setExtraFields(data);
       bodyEl.value = content || '';
       setCurrentFile(filename);
       isDirty = false;
@@ -323,6 +422,67 @@
     } catch (err) {
       setAutoState('error', 'Failed to load');
       TE.toast(err.message || 'Failed to load post.', 'error');
+    }
+  }
+
+  // Phase 5e: hydrate the new sidebar fields (series, publish_at,
+  // cover, custom_css, custom_js) from the front-matter object. Guards
+  // for missing DOM refs so tests that mount editor.js against a
+  // minimal HTML shell don't break.
+  function setExtraFields(data) {
+    const seriesEl = $('post-series');
+    const pubAtEl = $('post-publish-at');
+    const coverEl = $('post-cover');
+    const coverAltEl = $('post-cover-alt');
+    const cssEl = $('post-custom-css');
+    const jsEl = $('post-custom-js');
+    if (seriesEl) seriesEl.value = data.series || '';
+    if (pubAtEl) {
+      if (data.publish_at) {
+        try {
+          const d = new Date(data.publish_at);
+          d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+          pubAtEl.value = d.toISOString().slice(0, 16);
+        } catch (_) {
+          pubAtEl.value = '';
+        }
+      } else pubAtEl.value = '';
+    }
+    if (coverEl) coverEl.value = data.cover || '';
+    if (coverAltEl) coverAltEl.value = data.cover_alt || '';
+    if (cssEl) cssEl.value = data.custom_css || '';
+    if (jsEl) jsEl.value = data.custom_js || '';
+    updateCoverPreview();
+    updatePublishAtBadge();
+  }
+
+  function updateCoverPreview() {
+    const coverEl = $('post-cover');
+    const wrap = $('cover-preview');
+    const img = $('cover-preview-img');
+    if (!coverEl || !wrap || !img) return;
+    const url = coverEl.value.trim();
+    if (url) {
+      img.src = url;
+      img.alt = ($('post-cover-alt')?.value || '').trim();
+      wrap.hidden = false;
+    } else {
+      wrap.hidden = true;
+    }
+  }
+
+  function updatePublishAtBadge() {
+    const badge = $('publish-at-badge');
+    const pubAt = $('post-publish-at');
+    if (!badge || !pubAt) return;
+    const isDraft = draftEl?.value === 'true';
+    const ts = pubAt.value ? new Date(pubAt.value).getTime() : 0;
+    if (ts && isDraft && ts > Date.now()) {
+      const when = new Date(ts).toUTCString().replace(/:\d{2} GMT$/, ' UTC');
+      badge.textContent = `Scheduled · ${when}`;
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
     }
   }
 
@@ -343,6 +503,26 @@
         .map((t) => t.trim())
         .filter(Boolean),
     };
+    // Phase 5e: scoop optional fields. Empty strings are dropped so
+    // the front-matter object stays clean.
+    const series = ($('post-series')?.value || '').trim();
+    if (series) data.series = series;
+    const pubAt = $('post-publish-at')?.value || '';
+    if (pubAt) {
+      try {
+        data.publish_at = new Date(pubAt).toISOString();
+      } catch (_) {
+        /* invalid date — let server reject */
+      }
+    }
+    const cover = ($('post-cover')?.value || '').trim();
+    if (cover) data.cover = cover;
+    const coverAlt = ($('post-cover-alt')?.value || '').trim();
+    if (coverAlt) data.cover_alt = coverAlt;
+    const customCss = ($('post-custom-css')?.value || '').trim();
+    if (customCss) data.custom_css = customCss;
+    const customJs = ($('post-custom-js')?.value || '').trim();
+    if (customJs) data.custom_js = customJs;
     const content = bodyEl.value || '';
     const url = currentFile ? `/api/posts/${encodeURIComponent(currentFile)}` : '/api/posts';
     const method = currentFile ? 'PUT' : 'POST';
@@ -709,6 +889,38 @@
       setAutoState('idle', 'Ready');
     }
     loadTagSuggestions();
+
+    // Phase 5e wiring — only fires when the corresponding sidebar
+    // panels are present in the DOM (editor.html includes them).
+    const btnPreview = $('btn-preview-link');
+    if (btnPreview) btnPreview.addEventListener('click', generatePreviewLink);
+    const btnCover = $('btn-pick-cover');
+    if (btnCover) btnCover.addEventListener('click', pickCover);
+    const coverEl = $('post-cover');
+    if (coverEl)
+      coverEl.addEventListener('input', () => {
+        updateCoverPreview();
+        markDirty();
+      });
+    const coverAltEl = $('post-cover-alt');
+    if (coverAltEl)
+      coverAltEl.addEventListener('input', () => {
+        updateCoverPreview();
+        markDirty();
+      });
+    const pubAtEl = $('post-publish-at');
+    if (pubAtEl)
+      pubAtEl.addEventListener('change', () => {
+        updatePublishAtBadge();
+        markDirty();
+      });
+    if (draftEl) draftEl.addEventListener('change', updatePublishAtBadge);
+    ['post-series', 'post-custom-css', 'post-custom-js'].forEach((id) => {
+      const el = $(id);
+      if (el) el.addEventListener('input', markDirty);
+    });
+    // Load a template if ?template=<name> was passed for a new post
+    maybeLoadTemplate();
   }
 
   if (document.readyState === 'loading') {
