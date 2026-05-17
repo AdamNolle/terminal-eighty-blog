@@ -1574,7 +1574,9 @@ var TEEditor = (() => {
     buildParser: () => buildParser,
     default: () => editor_entry_default,
     isSafeLinkUrl: () => isSafeLinkUrl,
+    looksLikeSingleUrlPaste: () => looksLikeSingleUrlPaste,
     mount: () => mount,
+    resolveEmbed: () => resolveEmbed,
     serializer: () => serializer
   });
 
@@ -65734,6 +65736,47 @@ ${prefix}
     if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) return true;
     return false;
   }
+  var SINGLE_URL_PASTE = /^https:\/\/[\w\-.]+(?::\d+)?(?:\/[^\s]*)?$/i;
+  function looksLikeSingleUrlPaste(text2) {
+    if (typeof text2 !== "string") return false;
+    const trimmed = text2.trim();
+    if (!trimmed || trimmed.length > 2e3) return false;
+    if (/\s/.test(trimmed)) return false;
+    return SINGLE_URL_PASTE.test(trimmed);
+  }
+  function triggerEmbedPrompt(editor) {
+    const url = window.prompt("Embed URL (YouTube, Bluesky, Spotify, \u2026)");
+    if (!url) return;
+    if (!/^https:\/\//i.test(url)) {
+      alert("Only https:// URLs are supported.");
+      return;
+    }
+    resolveEmbed(url).then((shortcode) => {
+      if (shortcode) {
+        editor.chain().focus().insertContent(shortcode + "\n").run();
+      }
+      return null;
+    }).catch((err) => {
+      console.warn("[embed] resolve failed", err);
+      alert("Could not resolve that URL.");
+    });
+  }
+  async function resolveEmbed(url) {
+    if (!url || typeof url !== "string") return null;
+    try {
+      const res = await fetch("/api/embed?url=" + encodeURIComponent(url.trim()), {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (!res.ok) return null;
+      const body = await res.json();
+      if (!body || typeof body.shortcode !== "string") return null;
+      return body.shortcode;
+    } catch (err) {
+      console.warn("[embed] /api/embed failed", err);
+      return null;
+    }
+  }
   var SLASH_ITEMS = [
     {
       id: "h1",
@@ -65839,12 +65882,17 @@ ${prefix}
     {
       id: "embed",
       label: "Embed",
-      hint: "Embed video / tweet (Phase 7)",
+      hint: "YouTube / Bluesky / Spotify / link card",
       group: "Insert",
-      keywords: ["embed", "video", "tweet", "iframe"],
-      placeholder: true,
+      keywords: ["embed", "video", "tweet", "iframe", "youtube", "bluesky", "mastodon", "spotify"],
       run: (editor, range) => {
         editor.chain().focus().deleteRange(range).run();
+        const dom = editor.view.dom;
+        const evt = new CustomEvent("te-slash-embed", { bubbles: true, cancelable: true });
+        const handled = !dom.dispatchEvent(evt);
+        if (!handled) {
+          triggerEmbedPrompt(editor);
+        }
       }
     },
     {
@@ -65925,6 +65973,115 @@ ${prefix}
       const hay = (item.label + " " + (item.keywords || []).join(" ")).toLowerCase();
       return hay.includes(q);
     }).slice(0, 14);
+  }
+  function createEmbedPasteUI() {
+    const root = document.createElement("div");
+    root.className = "te-embed-paste";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-label", "Convert pasted link to embed");
+    root.style.position = "absolute";
+    root.style.zIndex = "320";
+    root.style.display = "none";
+    root.innerHTML = '<div class="te-embed-paste-row">  <span class="te-embed-paste-msg">Pasted URL detected.</span>  <button type="button" class="te-embed-paste-btn primary" data-action="embed">Insert embed</button>  <button type="button" class="te-embed-paste-btn" data-action="link">Insert link instead</button>  <button type="button" class="te-embed-paste-btn ghost" data-action="cancel" aria-label="Dismiss (ESC)">\xD7</button></div>';
+    document.body.appendChild(root);
+    let handlers3 = {};
+    let onDocKey = null;
+    function setBusy(busy) {
+      const btns = root.querySelectorAll("button");
+      btns.forEach((b) => {
+        b.disabled = Boolean(busy);
+      });
+      const primary = root.querySelector('[data-action="embed"]');
+      if (primary) {
+        primary.textContent = busy ? "Resolving\u2026" : "Insert embed";
+      }
+    }
+    function show(opts) {
+      handlers3 = opts || {};
+      setBusy(false);
+      root.style.display = "block";
+      positionNearSelection();
+      onDocKey = (e) => {
+        if (e.key === "Escape") {
+          hide();
+          try {
+            handlers3.onCancel && handlers3.onCancel();
+          } catch (_) {
+          }
+        }
+      };
+      document.addEventListener("keydown", onDocKey, true);
+    }
+    function hide() {
+      root.style.display = "none";
+      if (onDocKey) document.removeEventListener("keydown", onDocKey, true);
+      onDocKey = null;
+      handlers3 = {};
+    }
+    function positionNearSelection() {
+      let rect = null;
+      try {
+        const sel = window.getSelection && window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const r = sel.getRangeAt(0);
+          rect = r.getBoundingClientRect();
+        }
+      } catch (_) {
+      }
+      const docTop = window.scrollY || 0;
+      const docLeft = window.scrollX || 0;
+      const top2 = (rect && rect.bottom || 100) + docTop + 6;
+      const left = (rect && rect.left || 50) + docLeft;
+      root.style.top = top2 + "px";
+      root.style.left = left + "px";
+    }
+    root.addEventListener("click", (e) => {
+      const t2 = e.target;
+      if (!t2 || t2.tagName !== "BUTTON") return;
+      const action = t2.getAttribute("data-action");
+      if (action === "embed" && handlers3.onEmbed) handlers3.onEmbed();
+      else if (action === "link" && handlers3.onLink) handlers3.onLink();
+      else if (action === "cancel" && handlers3.onCancel) handlers3.onCancel();
+    });
+    return {
+      show,
+      hide,
+      setBusy,
+      element: root,
+      destroy() {
+        hide();
+        try {
+          root.remove();
+        } catch (_) {
+        }
+      }
+    };
+  }
+  function replacePastedUrlWith(editor, url, shortcode) {
+    const { state } = editor;
+    const { doc: doc4, selection } = state;
+    let from2 = -1;
+    let to = -1;
+    doc4.descendants((node, pos) => {
+      if (!node.isText) return;
+      const text2 = node.text || "";
+      let idx = text2.indexOf(url);
+      while (idx !== -1) {
+        const start = pos + idx;
+        const end = start + url.length;
+        if (end <= selection.from + 1) {
+          from2 = start;
+          to = end;
+        }
+        idx = text2.indexOf(url, idx + 1);
+      }
+      return true;
+    });
+    if (from2 < 0) {
+      editor.chain().focus().insertContent("\n" + shortcode + "\n").run();
+      return;
+    }
+    editor.chain().focus().setTextSelection({ from: from2, to }).deleteSelection().insertContent(shortcode + "\n").run();
   }
   function createSlashMenu() {
     const root = document.createElement("div");
@@ -67249,6 +67406,36 @@ $$`;
       editable: true
     });
     const parser5 = buildParser(editor.schema);
+    const embedPasteUI = createEmbedPasteUI();
+    wysiwygMount.addEventListener("paste", (e) => {
+      if (mode !== "wysiwyg") return;
+      const text2 = e.clipboardData && (e.clipboardData.getData("text/plain") || "").trim() || "";
+      if (!looksLikeSingleUrlPaste(text2)) return;
+      queueMicrotask(() => offerEmbedSwap(text2));
+    });
+    function offerEmbedSwap(url) {
+      embedPasteUI.show({
+        url,
+        onEmbed: async () => {
+          embedPasteUI.setBusy(true);
+          let shortcode = null;
+          try {
+            shortcode = await resolveEmbed(url);
+          } catch (err) {
+            console.warn("[embed] resolve failed", err);
+          }
+          embedPasteUI.hide();
+          if (!shortcode) {
+            alert("Could not resolve that URL for embed.");
+            return;
+          }
+          replacePastedUrlWith(editor, url, shortcode);
+        },
+        onLink: () => embedPasteUI.hide(),
+        onCancel: () => embedPasteUI.hide()
+      });
+    }
+    const embedPasteCleanup = () => embedPasteUI.destroy();
     function applyMarkdownToEditor(md, emit) {
       let doc4;
       try {
@@ -67678,13 +67865,14 @@ $$`;
     );
     gInsert.appendChild(
       tbBtn({
-        label: "Embed (Phase 7 wires)",
+        label: "Embed",
         shortcut: "",
         glyph: "\u29C9",
-        className: "is-placeholder",
         active: () => false,
-        canRun: () => false,
         run: () => {
+          const evt = new CustomEvent("te-slash-embed", { bubbles: true, cancelable: true });
+          const handled = !editor.view.dom.dispatchEvent(evt);
+          if (!handled) triggerEmbedPrompt(editor);
         }
       })
     );
@@ -68028,6 +68216,10 @@ $$`;
         }
         linkDialog = null;
       }
+      try {
+        embedPasteCleanup();
+      } catch (_) {
+      }
       rootEl.innerHTML = "";
       rootEl.classList.remove("te-editor");
     };
@@ -68087,6 +68279,6 @@ $$`;
     const p = (navigator.platform || "") + " " + (navigator.userAgent || "");
     return /Mac|iPhone|iPad|iPod/i.test(p);
   }
-  var editor_entry_default = { mount, isSafeLinkUrl };
+  var editor_entry_default = { mount, isSafeLinkUrl, resolveEmbed, looksLikeSingleUrlPaste };
   return __toCommonJS(editor_entry_exports);
 })();
