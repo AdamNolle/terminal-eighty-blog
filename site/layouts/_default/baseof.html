@@ -27,7 +27,13 @@
   {{ partial "footer.html" . }}
 </div>
 
-{{- /* Cmd+K palette — rendered once at the body root so it's always available */ -}}
+{{- /* Cmd+K palette — rendered once at the body root so it's always available.
+       The `.cmdk-list` container is rebuilt by site/static/js/app.js as a list
+       of <button class="cmdk-row"> rows. Keeping `role="listbox"` here would
+       require every child to be `role="option"`, but our rows are real
+       focusable <button> elements with their own keyboard handling. We use
+       a plain container + aria-label so screen readers can find it via the
+       palette landmark and skip into the rows. */ -}}
 <div id="cmdk" class="cmdk-back" role="dialog" aria-modal="true" aria-label="Search" hidden>
   <div class="cmdk">
     <div class="cmdk-input">
@@ -35,7 +41,7 @@
       <input type="text" placeholder="search posts, jump to a page…" autocomplete="off" spellcheck="false" aria-label="Search query" />
       <span class="kbd" aria-hidden="true">esc</span>
     </div>
-    <div class="cmdk-list" role="listbox"></div>
+    <div class="cmdk-list" aria-label="Search results"></div>
   </div>
 </div>
 

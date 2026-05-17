@@ -128,7 +128,7 @@
         // and a sibling button for delete — putting <button> inside <a> is
         // invalid HTML and several browsers flatten it.
         return `
-        <div class="row-grid" data-filename="${fn}" role="row">
+        <div class="row-grid" data-filename="${fn}">
           <a class="r-link" href="${href}" aria-label="Edit ${title}">
             <span class="r-num">${num}</span>
             <span class="r-title-wrap">

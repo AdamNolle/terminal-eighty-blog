@@ -208,6 +208,120 @@ Short, declarative, no period. Match the existing log: `Phase 1.5: lint, test, a
 
 If a rule turns out noisier than useful, downgrade rather than disable globally.
 
+## Accessibility (WCAG 2.2 AA)
+
+The site and the admin CMS both target **WCAG 2.2 AA**. The CI a11y suite
+fails on any `serious` or `critical` violation surfaced by axe-core; PRs
+that introduce one don't merge. This section captures the contract so you
+don't have to rediscover it the hard way.
+
+### Contrast requirements
+
+All design tokens that drop ink on a surface must clear:
+
+- **4.5 : 1** for body text, link text, status labels, captions
+- **3.0 : 1** for non-decorative UI components (form borders that signal
+  state, focus rings, toggle handles)
+
+The set of token pairs we ship is enumerated in
+`site/test/contrast.test.js`. Every token in that file has a target
+floor and a one-line justification. Adding a new token or changing an
+existing one means updating that table — the unit test will catch the
+omission.
+
+Theme tokens live in two files, one per surface:
+
+- `site/assets/css/screen.css` → `:root` + `[data-theme="dark|light"]`
+- `admin/public/css/admin.css` → same names + admin-only `--warn` / `--danger`
+
+The dark-on-dark-with-lava-blob backdrop is the trickiest case — see the
+`.progress` and `.post-meta` rules in `screen.css` for the documented
+workaround (opaque `color-mix` on the strip, `--fg-dim` for foreground).
+
+### Motion
+
+`@media (prefers-reduced-motion: reduce)` collapses all transitions and
+animations to ~0ms (see the bottom of section 2 in both
+`screen.css` and `admin.css`). The reading-progress bar still updates
+(it's state, not motion); the lava blob keyframes, scanlines, blink,
+and pulse all stop. If you add a new motion effect, gate it behind the
+same media query or use `transition-duration` so the global override
+catches it.
+
+### Focus management
+
+- The body has `*:focus-visible { outline: 2px solid var(--accent); }`
+  in both stylesheets. Don't suppress this on a per-component basis.
+  If a component looks bad with the ring, change the spacing — not the
+  outline.
+- Every dialog (`role="dialog" aria-modal="true"`) installs a focus
+  trap via `TE.openModal` / `TE.closeModal` in `admin/public/js/common.js`
+  (admin) or the equivalent code paths in `site/static/js/lightbox.js`
+  and `site/static/js/app.js` (public). The trap restores focus to the
+  triggering element on close.
+- The Cmd+K palette gets the same trap. It's a `<dialog>`-shaped div with
+  `aria-modal="true"` and a focusable input as the initial target.
+- `<main id="main" tabindex="-1">` exists on every page so the skip link
+  (`<a class="skip-link" href="#main">`) can land focus there.
+
+### How to run the a11y tests
+
+```bash
+# Static-surface axe runs (no live admin server needed)
+npx playwright test test/playwright/a11y.spec.js
+npx playwright test test/playwright/admin-a11y.spec.js
+
+# Token contrast (Vitest, sub-second)
+npx vitest run --config vitest.config.js site/test/contrast.test.js
+
+# Optional: live-server axe scenarios for the cmdk palette + modals
+DEV_STACK_RUNNING=1 ADMIN_ORIGIN=http://127.0.0.1:8787 \
+  npx playwright test test/playwright/admin-a11y.spec.js
+```
+
+CI runs the first three on every PR. The live-server scenarios are
+skipped by default; flip `DEV_STACK_RUNNING=1` locally when you have
+`npm run dev:all` up to exercise the palette + template-picker modal.
+
+### Accepted axe rule exceptions
+
+We disable the following rules on the admin a11y spec only, each with
+a one-line justification (see `test/playwright/admin-a11y.spec.js`):
+
+| Rule                   | Where      | Why                                                                                                                     |
+| ---------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `region`               | admin only | The admin is a single-purpose shell with `<aside>` + `<header>` landmarks; content panels are layout `<div>` by design. |
+| `page-has-heading-one` | admin only | Hash-router views with the H1 are hidden on file:// boot; the H1 is asserted directly in `admin.spec.js`.               |
+
+Don't expand this list without a PR-level conversation. Every exception
+is a place where a real defect can hide.
+
+### Status-and-color independence
+
+Status indicators must pair a glyph with the color. `comments.css` does
+this via `::before` pseudo-elements on `.te-cm-status.s-*` — pinned star,
+spam ⨯, deleted minus, pending …, visible check. The pattern is:
+
+```css
+.te-cm-status.s-spam {
+  color: var(--danger);
+}
+.te-cm-status.s-spam::before {
+  content: "⨯ ";
+}
+```
+
+Same idea for `dashboard.css` health dots (`.ddot.bad`, `.ddot.warn`
+already include text) and the post-list pills (`.r-pill.draft` ships
+the literal text "DRAFT").
+
+### Forms
+
+Every input gets a real `<label>` — visually hidden via `.sr-only` when
+the design calls for a bare icon. Hard errors use
+`role="alert"`; soft hints use `aria-describedby` on the input. See
+`admin/public/login.html` for the canonical example.
+
 ## Editor shortcuts
 
 The admin post editor (`/editor`) is a dual-mode TipTap + CodeMirror surface.

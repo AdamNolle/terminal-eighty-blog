@@ -303,7 +303,10 @@ export default [
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: 'module',
-      globals: { ...globals.node },
+      // Playwright callbacks that run inside page.evaluate execute in
+      // the browser context, so we need browser globals (window,
+      // document) alongside Node globals (process, etc.).
+      globals: { ...globals.node, ...globals.browser },
     },
     rules: {
       ...sharedRules,

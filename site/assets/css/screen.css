@@ -1033,14 +1033,22 @@ main:focus:not(:focus-visible) {
   align-items: center;
   padding: 0 22px;
   gap: 12px;
-  background: var(--glass-tint);
+  /*
+    Phase 10 a11y: the reading-progress strip is sticky over the lava
+    blob backdrop. We need a near-opaque base so axe can compute a stable
+    contrast ratio and so the green lava bleed doesn't drop the label
+    text below 4.5:1. color-mix keeps the glass feel while pinning the
+    bottom 92% of the layer to --bg.
+  */
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--glass-border);
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.16em;
-  color: var(--fg-mute);
+  /* fg-dim is 5.57:1 / 6.39:1 on the new opaque base — safely above 4.5:1. */
+  color: var(--fg-dim);
   text-transform: uppercase;
   pointer-events: none;
   user-select: none;
@@ -1161,7 +1169,15 @@ main:focus:not(:focus-visible) {
   align-items: center;
   font-family: var(--mono);
   font-size: 11.5px;
-  color: var(--fg-mute);
+  /*
+    Phase 10 a11y: the post-meta strip sits inside `.post` which has no
+    opaque background — the lava blob backdrop bleeds through. Using
+    --fg-dim (9ca29f) instead of --fg-mute (8a9491) gives 7.49:1 on
+    --bg, which holds up even with a 30% green tint mixed in. The
+    --fg-mute token still ships for low-noise UI bits like row dates,
+    where the surrounding container has an opaque background.
+  */
+  color: var(--fg-dim);
   letter-spacing: 0.04em;
   padding-bottom: 24px;
   border-bottom: 1px solid var(--line);

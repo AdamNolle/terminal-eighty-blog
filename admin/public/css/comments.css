@@ -255,17 +255,44 @@
   align-self: center;
 }
 
+/*
+  Phase 10 color-independence: every status pairs a glyph with the
+  color so users with monochrome vision (or in print) still get the
+  signal. The glyphs are pure CSS so we don't have to update the
+  comments.js render path. Decorative pseudo-elements only — the
+  status text itself ("spam", "pending", "deleted", "pinned") still
+  carries the semantic information for screen readers.
+*/
+.te-cm-status::before {
+  display: inline-block;
+  margin-right: 4px;
+  font-weight: 700;
+}
+.te-cm-status.s-visible::before {
+  content: "✓ ";
+  color: var(--accent);
+}
 .te-cm-status.s-pinned {
   color: var(--accent);
 }
-
+.te-cm-status.s-pinned::before {
+  content: "★ ";
+}
 .te-cm-status.s-spam,
 .te-cm-status.s-deleted {
   color: var(--danger);
 }
-
+.te-cm-status.s-spam::before {
+  content: "⨯ ";
+}
+.te-cm-status.s-deleted::before {
+  content: "− ";
+}
 .te-cm-status.s-pending {
   color: var(--warn);
+}
+.te-cm-status.s-pending::before {
+  content: "… ";
 }
 
 .te-cm-ts {
