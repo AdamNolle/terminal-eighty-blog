@@ -9,7 +9,7 @@
     "dev": "node --watch server.js",
     "build:editor": "NODE_ENV=production node scripts/build-editor.mjs",
     "dev:editor": "node scripts/build-editor.mjs --watch",
-    "test": "node --test --test-reporter spec test/auth.test.js test/media.test.js test/conversion.test.js test/conversion-av.test.js test/conversion-pdc.test.js test/posts-bulk.test.js test/settings.test.js test/taxonomies.test.js test/redirects.test.js test/activity.test.js test/scheduler.test.js test/toml-roundtrip.test.js test/publish-media-data.test.js test/embed.test.js",
+    "test": "node --test --test-reporter spec test/auth.test.js test/media.test.js test/conversion.test.js test/conversion-av.test.js test/conversion-pdc.test.js test/posts-bulk.test.js test/settings.test.js test/taxonomies.test.js test/redirects.test.js test/activity.test.js test/scheduler.test.js test/toml-roundtrip.test.js test/publish-media-data.test.js test/embed.test.js test/webmentions.test.js",
     "lint": "cd .. && npm run lint:js -- admin/"
   },
   "dependencies": {
@@ -52,6 +52,7 @@
     "markdown-it": "^14.1.1",
     "markdown-it-container": "^4.0.0",
     "markdown-it-footnote": "^4.0.0",
+    "microformats-parser": "^2.0.4",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.0.9",
     "prosemirror-markdown": "^1.13.4",

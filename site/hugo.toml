@@ -21,8 +21,30 @@ copyright = "Terminal Eighty"
   mediaType = "application/rss+xml"
   baseName = "index"
 
+# Phase 8 — webfinger output. Bridgy Fed expects
+# `https://terminaleighty.com/.well-known/webfinger?resource=acct:blog@…`
+# to return a JRD JSON document that points at the Bridgy Fed actor.
+# Hugo renders this from `layouts/index.webfinger.json` to
+# `/.well-known/webfinger` (no extension).
+#
+# `notAlternative` keeps it out of `<link rel="alternate">` in <head>.
+# The empty `suffixes = []` on the media type below tells Hugo not to
+# append `.json` to the URL — the IANA spec for webfinger demands the
+# exact path `/.well-known/webfinger` with no file extension.
+[outputFormats.webfinger]
+  mediaType = "application/jrd+json"
+  baseName = "webfinger"
+  path = ".well-known"
+  isPlainText = true
+  notAlternative = true
+
+# Phase 8 — `application/jrd+json` with no filename suffix so the
+# output format above renders to `/webfinger`, not `/webfinger.json`.
+[mediaTypes."application/jrd+json"]
+  suffixes = []
+
 [outputs]
-  home = ["HTML", "RSS", "JSON"]
+  home = ["HTML", "RSS", "JSON", "webfinger"]
 
 # Minify HTML/CSS/JS output for production builds
 [minify]

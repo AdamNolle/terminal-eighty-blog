@@ -4,6 +4,13 @@
 # The `admin.terminaleighty.com` etc. are handled by Cloudflare routing here.
 
 http://{$DOMAIN_ADMIN} {
+    # Phase 8 — Webmention receiver. Public (no auth) endpoint that
+    # accepts pings forwarded by Bridgy Fed from the Fediverse. Mounts
+    # at /webmention on the same admin subdomain so the existing TLS +
+    # tunnel config covers it.
+    @webmention path /webmention /webmention/*
+    reverse_proxy @webmention cms:3000
+
     reverse_proxy cms:3000
 }
 

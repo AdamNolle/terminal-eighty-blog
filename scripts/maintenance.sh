@@ -28,8 +28,17 @@ sudo journalctl --vacuum-time=7d
 # pass catches any drift if the 5-min cron was off.
 SCHED_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/promote-scheduled.sh"
 if [ -x "$SCHED_SCRIPT" ]; then
-  echo "[4/4] Running scheduled-post promoter..."
+  echo "[4/5] Running scheduled-post promoter..."
   "$SCHED_SCRIPT" || echo "scheduler failed (continuing)"
+fi
+
+# 5. Dump approved webmentions to site/data/webmentions/.
+# Same safety-net rationale as (4) — the 5-min cron is the primary
+# trigger; this catches drift if the cron was off.
+DUMP_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dump-webmentions.sh"
+if [ -x "$DUMP_SCRIPT" ]; then
+  echo "[5/5] Running webmention dumper..."
+  "$DUMP_SCRIPT" || echo "webmention dump failed (continuing)"
 fi
 
 echo "Maintenance completed successfully at $(date)"

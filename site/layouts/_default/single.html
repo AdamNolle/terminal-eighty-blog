@@ -38,7 +38,12 @@
   </div>
 
   <a class="u-url" href="{{ .Permalink }}" hidden></a>
-  <span class="p-author h-card" hidden>{{ site.Params.author | default site.Title }}</span>
+  {{- /* Phase 8 — p-author wraps an h-card so Fediverse servers that
+         parse this h-entry (via Bridgy Fed) attribute the post to the
+         right actor. The partial is reused (compact form) in the
+         site-wide footer. `hidden` keeps the page visually unchanged
+         here; the h-entry classes carry the metadata. */ -}}
+  <div class="p-author" hidden>{{ partial "h-card.html" (dict "compact" true) }}</div>
 
   {{- /* Phase 5e: cover image, when set in front-matter. `cover_alt`
          feeds the alt text — required for accessibility. The image is

@@ -28,6 +28,14 @@ import activityRoutes from './src/routes/activity.js';
 // URLs through their oEmbed endpoints (or a generic OG scrape) and
 // caches the result for 24h in the `embed_cache` table.
 import embedRoutes from './src/routes/embed.js';
+// Phase 8: Webmention receiver — the inbound side of Fediverse
+// federation via Bridgy Fed. `publicRouter` mounts at /webmention
+// (no auth, rate-limited) for incoming pings; `adminRouter` mounts
+// at /api/webmentions for moderation behind the session cookie.
+import {
+  publicRouter as webmentionPublicRoutes,
+  adminRouter as webmentionAdminRoutes,
+} from './src/routes/webmentions.js';
 // Phase 4: tiny migration runner — applies any pending DDL in
 // `src/db/migrations/` (auth tables, media table, …) before we serve
 // the first request. Safe to call on every boot; already-applied
@@ -93,6 +101,17 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Phase 8: Webmention receiver is public-facing; cap inbound POSTs
+// per-IP to absorb spam without dropping Bridgy Fed's legitimate
+// bursts (Mastodon fans-out one ping per follower-mentioning-us).
+const webmentionLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  message: { error: 'Too many webmentions. Slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Static files (admin UI)
 app.use(express.static(join(__dirname, 'public')));
 
@@ -119,6 +138,13 @@ app.use(
 
 // Auth routes (rate limited)
 app.use('/auth', authLimiter, authRoutes);
+
+// Phase 8: Webmention receiver. Public-facing endpoint (no session
+// required) — mounted BEFORE the /api auth middleware so the
+// auth-cookie check below doesn't bounce Bridgy Fed's POSTs.
+// The admin moderation surface mounts under /api/webmentions further
+// down (behind the session cookie).
+app.use('/webmention', webmentionLimiter, webmentionPublicRoutes);
 
 // Auth middleware for API routes
 app.use('/api', (req, res, next) => {
@@ -152,6 +178,9 @@ app.use('/api/redirects', redirectsRoutes);
 app.use('/api/activity', activityRoutes);
 // Phase 7
 app.use('/api/embed', embedRoutes);
+// Phase 8 — admin moderation surface for inbound webmentions. Sits
+// behind the same session auth as /api/posts etc.
+app.use('/api/webmentions', webmentionAdminRoutes);
 // Templates static mount — read-only access to admin/templates/*.md so
 // the "New Post" picker can fetch each scaffold.
 app.use('/api/templates', express.static(join(__dirname, 'templates'), { fallthrough: false }));
