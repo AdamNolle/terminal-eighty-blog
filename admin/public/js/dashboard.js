@@ -319,9 +319,15 @@
       }
       if (sys) sys.textContent = anyBad ? 'DEGRADED' : anyWarn ? 'WARN' : 'OK';
 
-      // Backup line
+      // Backup line — Phase 5e: color-code based on age. stale (>36h)
+      // shows in --danger, warn (>24h) in --warn, ok in --fg-dim.
       const backup = $('backup-status');
       if (backup) {
+        const status = data?.backup?.status;
+        let color = 'var(--fg-dim)';
+        if (status === 'stale') color = 'var(--danger)';
+        else if (status === 'warn') color = 'var(--warn)';
+        backup.style.color = color;
         if (data?.backup?.log) {
           const last = String(data.backup.log).trim().split(/\r?\n/).pop() || '—';
           backup.textContent = last;

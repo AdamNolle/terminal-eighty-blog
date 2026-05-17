@@ -18,6 +18,12 @@ import postsRoutes from './src/routes/posts.js';
 import mediaRoutes from './src/routes/media.js';
 import publishRoutes from './src/routes/publish.js';
 import healthRoutes from './src/routes/health.js';
+// Phase 5e CMS-completeness routes — site settings, taxonomies,
+// redirects, and the activity log dashboard widget.
+import settingsRoutes from './src/routes/settings.js';
+import taxonomiesRoutes from './src/routes/taxonomies.js';
+import redirectsRoutes from './src/routes/redirects.js';
+import activityRoutes from './src/routes/activity.js';
 // Phase 4: tiny migration runner — applies any pending DDL in
 // `src/db/migrations/` (auth tables, media table, …) before we serve
 // the first request. Safe to call on every boot; already-applied
@@ -135,6 +141,14 @@ app.use('/api/posts', postsRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/publish', publishRoutes);
 app.use('/api/health', healthRoutes);
+// Phase 5e
+app.use('/api/settings', settingsRoutes);
+app.use('/api/taxonomies', taxonomiesRoutes);
+app.use('/api/redirects', redirectsRoutes);
+app.use('/api/activity', activityRoutes);
+// Templates static mount — read-only access to admin/templates/*.md so
+// the "New Post" picker can fetch each scaffold.
+app.use('/api/templates', express.static(join(__dirname, 'templates'), { fallthrough: false }));
 
 // SPA fallback — serve index.html for client-side routing
 app.get('*', (req, res) => {

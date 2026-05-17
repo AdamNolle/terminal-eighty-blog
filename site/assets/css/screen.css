@@ -2029,3 +2029,144 @@ main:focus:not(:focus-visible) {
 .prose aside.callout.callout-danger .callout-label::before {
   background: var(--danger, #c44);
 }
+
+/* ============================================================
+   Phase 5e — Cover image, series nav, gallery
+   ============================================================ */
+
+.post-cover {
+  margin: 24px 0 18px;
+}
+.post-cover img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.06));
+}
+.post-cover figcaption {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-mute, currentColor);
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* Series navigation block, rendered inside single.html */
+.series-nav {
+  margin: 18px 0 24px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  padding: 14px 16px;
+  background: var(--bg-elev, transparent);
+}
+.series-nav-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono, monospace);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--fg-mute, currentColor);
+  margin-bottom: 8px;
+}
+.series-nav-flag {
+  background: var(--accent-soft, transparent);
+  color: var(--accent, currentColor);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+.series-nav-name {
+  color: var(--fg, currentColor);
+  text-decoration: none;
+  font-weight: 600;
+}
+.series-nav-name:hover {
+  text-decoration: underline;
+}
+.series-nav-pager {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.series-nav-prev,
+.series-nav-next {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--fg, currentColor);
+  background: var(--bg, transparent);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  min-height: 44px;
+}
+.series-nav-prev:hover,
+.series-nav-next:hover {
+  border-color: var(--accent, currentColor);
+}
+.series-nav-prev.disabled,
+.series-nav-next.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.series-nav-next {
+  text-align: right;
+}
+.series-nav-dir {
+  font-family: var(--mono, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-mute, currentColor);
+}
+.series-nav-title {
+  font-weight: 500;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Gallery shortcode */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 20px 0;
+}
+.gallery-item {
+  display: block;
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.06));
+  background: var(--bg-elev, transparent);
+}
+.gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 200ms ease;
+}
+.gallery-item:hover img {
+  transform: scale(1.02);
+}
+
+/* Series index page cards */
+.series-list .series-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.series-list .card-sub {
+  color: var(--fg-mute, currentColor);
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}

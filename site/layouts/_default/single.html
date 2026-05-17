@@ -40,6 +40,23 @@
   <a class="u-url" href="{{ .Permalink }}" hidden></a>
   <span class="p-author h-card" hidden>{{ site.Params.author | default site.Title }}</span>
 
+  {{- /* Phase 5e: cover image, when set in front-matter. `cover_alt`
+         feeds the alt text — required for accessibility. The image is
+         purely decorative below the meta block; the same URL is also
+         emitted as og:image by head.html. */ -}}
+  {{- with .Params.cover -}}
+  <figure class="post-cover">
+    <img src="{{ . }}" alt="{{ $.Params.cover_alt | default $.Title }}" loading="lazy" decoding="async" />
+    {{- with $.Params.cover_caption -}}
+    <figcaption>{{ . }}</figcaption>
+    {{- end -}}
+  </figure>
+  {{- end -}}
+
+  {{- /* Phase 5e: series navigation. Renders nothing if `series` is
+         unset or only has one entry. */ -}}
+  {{ partial "series-nav.html" . }}
+
   <div class="prose e-content">
     {{- /* Phase 3c: transform `:::TYPE ... :::` callout directives into
            semantic `<aside class="callout callout-TYPE">…</aside>`. Hugo's
@@ -79,4 +96,16 @@
 
   {{ partial "comments.html" . }}
 </article>
+
+{{- /* Phase 5e: per-post custom CSS/JS. ONLY authenticated admin users
+       can set these fields (the API auth middleware in server.js
+       enforces it), so trust is OK. We still pass through safeCSS /
+       safeJS so Hugo's HTML minifier doesn't mangle the contents.
+       Documented trust model: see CONTRIBUTING.md. */ -}}
+{{- with .Params.custom_css -}}
+<style>{{ . | safeCSS }}</style>
+{{- end -}}
+{{- with .Params.custom_js -}}
+<script>{{ . | safeJS }}</script>
+{{- end -}}
 {{ end }}

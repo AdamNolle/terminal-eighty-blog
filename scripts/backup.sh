@@ -61,3 +61,10 @@ git commit -m "Automated backup: $TIMESTAMP"
 git push origin main
 
 echo "Backup completed successfully at $(date)"
+
+# Phase 5e: write a marker file the admin dashboard reads to surface
+# "Last backup: N hours ago". Lives in the per-user state dir so the
+# admin process can find it without elevated permissions.
+MARKER_DIR="${TE_STATE_DIR:-$HOME/.terminal-eighty}"
+mkdir -p "$MARKER_DIR"
+date -u +"%Y-%m-%dT%H:%M:%SZ" > "$MARKER_DIR/.last_backup"

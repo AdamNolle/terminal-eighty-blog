@@ -2,6 +2,9 @@
 site/public/
 site/resources/_gen/
 
+# Phase 5e: redirects emitter marker dir (regenerated each build)
+site/static/.t80-redirects/
+
 # macOS noise
 .DS_Store
 

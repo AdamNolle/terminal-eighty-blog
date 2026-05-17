@@ -399,3 +399,103 @@ modes is a fixed point after the first normalisation pass.
   dependency to a Node-26-compatible version.)
 - **Vitest + Node 26**: Node's experimental top-level `localStorage` shadows
   jsdom's. `site/test/setup.js` polyfills it.
+
+## Phase 5e — CMS authoring extras
+
+### Scheduled publishing
+
+Add `publish_at: "2026-07-04T12:00:00Z"` to a draft's front-matter and
+keep `draft: true`. A Pi cron (every 5 min) invokes
+`scripts/promote-scheduled.sh`, which calls `node
+admin/src/services/scheduler.js` to flip every past-due draft to
+`draft: false` and commits + pushes the change. Hugo's next build picks
+them up. The editor sidebar's **Schedule** panel surfaces this — a
+"Scheduled" badge appears whenever a draft has a future `publish_at`.
+
+To install the cron on the Pi (one-time):
+
+```bash
+*/5 * * * * /opt/terminal-eighty/scripts/promote-scheduled.sh \
+    >> /var/log/terminal-eighty-scheduler.log 2>&1
+```
+
+The `--dry-run` flag prints what would change without writing.
+
+### Draft preview links
+
+`POST /api/posts/<filename>/preview` returns a 7-day signed HMAC-SHA256
+JWT URL of the shape `https://terminaleighty.com/drafts/<slug>/?token=…`.
+The secret is `SITE_SECRET` (falls back to `SESSION_SECRET`).
+
+**Verification choice (deliberate for Phase 5e):** the JWT is issued by
+the admin; verification is **expected to happen at the reverse-proxy
+layer** (Caddy/Cloudflare Worker) using the same shared secret. Phase
+5e ships the issuer only — the proxy work is a Phase 11+ follow-up
+when drafts move behind the CDN edge. Until then, a draft URL anyone
+gets is functionally a bearer token; treat the link itself as the
+credential.
+
+### Per-post custom CSS / JS — trust model
+
+Front-matter fields `custom_css` and `custom_js` are rendered verbatim
+into the page (`safeCSS` / `safeJS`).
+
+**Trust model:** only authenticated admin users can write these fields
+— `server.js` requires a valid session on `PUT /api/posts/*`. The
+sanitization choice (none on write, `safeCSS`/`safeJS` pass-through on
+render) is intentional: an admin who can write JS to the site already
+controls the site, and stripping CSS/JS at write time would block
+legitimate uses (per-post stylesheets, embed widgets). Compromise the
+admin account and the attacker can already publish a malicious post —
+custom CSS/JS doesn't expand the blast radius.
+
+If you ever delegate write access to a less-trusted contributor,
+either remove the fields from the UI or wrap them in a DOMPurify pass
+before persistence.
+
+### Shortcodes documentation
+
+`admin/#/shortcodes` reads every file in `site/layouts/shortcodes/*.html`
+and extracts the first Hugo comment block as documentation. The
+convention is:
+
+- Anything before a `---` separator → `doc`
+- Anything after → `usage`
+
+Keep these comments at the top of new shortcode templates so they show
+up in the admin reference automatically.
+
+### Activity log
+
+Every CMS mutation writes a row to the `activity_log` SQLite table
+(see `admin/src/db/migrations/004_activity_log.sql`). Writes are
+fire-and-forget via `services/activity.js`, so a DB hiccup never
+blocks a save. The dashboard widget surfaces the 10 most recent
+entries; the dedicated `/admin/#/activity` page shows the latest 50
+with optional `?action=...` and `?since=...` filters.
+
+### Backup status
+
+`scripts/backup.sh` writes a `~/.terminal-eighty/.last_backup`
+timestamp on success. The dashboard reads it via `getBackupStatus` and
+colour-codes the line:
+
+- ok (≤24h)
+- warn (24–36h)
+- stale (>36h, shown in `--danger`)
+
+Override the marker directory with `TE_STATE_DIR` if your Pi keeps
+state outside `$HOME`.
+
+### Redirects
+
+Site-wide forwards live in `site/data/redirects.json`. The admin's
+**Redirects** page wraps `GET/POST/PUT/DELETE /api/redirects`.
+At build time, `scripts/dev/build-redirects.mjs` emits one static
+HTML page per entry under `site/static/<from>/index.html` with a
+meta-refresh + JS fallback + canonical link. `npm run build` and
+`npm run build:check` invoke it automatically.
+
+For **per-post** redirects (e.g. the post moved slug), prefer Hugo's
+built-in `aliases:` front-matter field — those are auto-emitted by
+Hugo and stay alongside the post.
