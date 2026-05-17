@@ -198,6 +198,48 @@ export default [
     },
   },
 
+  // Phase 5d dev scripts — Node ESM CLI tools under scripts/dev/.
+  // Test files in scripts/dev/__tests__/ are picked up by the Vitest
+  // block below via the explicit pattern; this entry covers the
+  // executable .mjs scripts and the shared _lib.mjs module.
+  {
+    files: ['scripts/dev/**/*.{js,mjs}'],
+    ignores: ['scripts/dev/__tests__/**'],
+    plugins: { security, n },
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
+      ...sharedRules,
+      'n/no-missing-import': 'off',
+      'n/no-unpublished-import': 'off',
+      'jsdoc/require-jsdoc': 'off',
+      'jsdoc/require-param-description': 'off',
+      'jsdoc/require-returns-description': 'off',
+      'jsdoc/tag-lines': 'off',
+      'jsdoc/no-undefined-types': 'off',
+    },
+  },
+
+  // Phase 5d dev-script Vitest tests.
+  {
+    files: ['scripts/dev/__tests__/**/*.{test,spec}.js'],
+    plugins: { security },
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
+      ...sharedRules,
+      'security/detect-object-injection': 'off',
+      'jsdoc/require-jsdoc': 'off',
+      'jsdoc/tag-lines': 'off',
+    },
+  },
+
   // Tests — Vitest (site + admin frontend) + their setup helpers
   {
     files: ['site/test/**/*.js', 'admin/test/**/*.vitest.{test,spec}.js'],

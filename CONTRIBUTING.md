@@ -21,25 +21,93 @@ to every contribution — including future-me.
 
 ## Local development
 
-You need Node 20 LTS or newer and Hugo extended ≥ 0.161. macOS, Linux, and
-WSL are all supported.
+You need Node 20 LTS or newer, Hugo extended ≥ 0.161, and Docker (for the
+full-stack mode below). macOS, Linux, and WSL are all supported.
+
+### Quickstart (full stack)
+
+The Phase 5d scripts boot Hugo + admin + Remark42 + Umami + Postgres in one
+command. Use this when you want to exercise the complete authoring loop.
 
 ```bash
-# one-time setup
 npm install
 cd admin && npm install && cd ..
+cp docker/.env.dev.example docker/.env.dev
+npm run db:seed          # admin user "admin" / "password" + 5 media fixtures
+npm run dev:all          # Docker + hugo + admin in parallel, colored logs
+```
 
-# everyday loops
+| Script               | What it does                                                           |
+| -------------------- | ---------------------------------------------------------------------- |
+| `npm run dev:all`    | `run-p` over `dev:docker`, `dev:hugo`, `dev:admin` (the full stack)    |
+| `npm run dev:docker` | Foreground `docker compose up` against `docker/docker-compose.dev.yml` |
+| `npm run dev:hugo`   | `hugo server --buildDrafts --buildFuture` on port `1313`               |
+| `npm run dev:admin`  | `node --watch server.js` in `admin/` on port `3000`                    |
+| `npm run dev:check`  | Ping every service, print status table, exit non-zero on any failure   |
+| `npm run db:seed`    | Idempotent — creates admin user + media fixtures                       |
+| `npm run db:reset`   | Wipe dev DB + dev uploads, re-seed (prompts; pass `--yes` to skip)     |
+| `npm run dev:stop`   | `docker compose down`                                                  |
+
+Service ports (deliberately offset from prod so both compose files could
+coexist on one host):
+
+| Service   | Dev URL                 | Notes                                                 |
+| --------- | ----------------------- | ----------------------------------------------------- |
+| Hugo      | <http://localhost:1313> | Drafts + future posts visible                         |
+| Admin CMS | <http://localhost:3000> | `admin` / `password` after `npm run db:seed`          |
+| Remark42  | <http://localhost:8081> | Admin auth: user `admin`, password `admin`            |
+| Umami     | <http://localhost:3001> | Admin/admin on first visit; will prompt to change pwd |
+| Postgres  | `localhost:5433`        | Database `umami`, user `umami`                        |
+
+### Passkeys in local dev
+
+WebAuthn's `rpID` is set to `localhost` in dev, so passkeys work on every
+modern browser without HTTPS. After logging in with the seeded password,
+hit **Settings → Security → Register Passkey** to bind Touch ID / Windows
+Hello to the dev admin user. The credential is stored in
+`admin/data/auth-dev.db` and lost the next time you run `npm run db:reset`.
+
+### Testing the conversion pipeline
+
+Drop any file into the media library (`/media` in the admin) — the
+conversion worker picks it up immediately and writes derived variants into
+`site/static/images/<id>/` (images) or `site/static/files/<id>/` (video,
+audio, PDF, archives). Watch the admin terminal — every job logs with the
+`[conversion-worker]` prefix. If a job hangs, delete its row from the
+`conversion_jobs` table:
+
+```bash
+sqlite3 admin/data/auth-dev.db \
+  "DELETE FROM conversion_jobs WHERE status IN ('running', 'pending');"
+```
+
+The worker reads its claim cursor on the next tick, so deletes take effect
+without restarting the admin.
+
+### Testing oEmbed (Phase 6 sneak peek)
+
+Paste a YouTube / Vimeo / Bluesky URL into the editor on a line by itself.
+The TipTap embed extension (lands in Phase 6 — Phase 5d ships the
+plumbing) calls the admin's `/api/embed?url=…` endpoint, which proxies to
+the source oEmbed provider with a 5-second timeout.
+
+### Light-loop alternative (no Docker)
+
+If you only need the admin + Hugo (no comments/analytics), the legacy
+two-terminal flow still works:
+
+```bash
 npm run dev:site         # hugo server on http://127.0.0.1:1414
 npm run dev:admin        # admin CMS on http://localhost:3000
+```
 
-# checks before pushing
+### Checks before pushing
+
+```bash
 npm run lint             # parallel: ESLint, Stylelint, Prettier, markdownlint, htmlhint, tsc
-npm test                 # Vitest (site) + node --test (admin)
+npm test                 # Vitest (site + dev scripts) + node --test (admin)
 npm run build            # production Hugo build into site/public/
-
-# fix what's auto-fixable
-npm run fix              # runs prettier --write + eslint --fix + stylelint --fix
+npm run fix              # auto-fixable: prettier --write + eslint --fix + stylelint --fix
 ```
 
 ## Quality gates that block a PR

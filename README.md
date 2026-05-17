@@ -9,6 +9,36 @@ Welcome to **Terminal Eighty**, a high-performance, $0/month, self-hosted blog s
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local development, the quality pipeline, and branch-protection setup.
 
+## Quickstart (local dev)
+
+A fresh clone runs the entire stack — Hugo, the admin CMS, Remark42, Umami,
+and Postgres — on a laptop in one command.
+
+```bash
+git clone https://github.com/AdamNolle/terminal-eighty-blog
+cd terminal-eighty-blog
+npm install
+cp docker/.env.dev.example docker/.env.dev
+npm run db:seed       # creates admin user (admin / password) and 5 sample media rows
+npm run dev:all       # docker (Remark42 + Umami + Postgres) + hugo + admin in parallel
+```
+
+Open:
+
+- Public site: <http://localhost:1313>
+- Admin: <http://localhost:3000> (log in: `admin` / `password`)
+- Comments (Remark42): <http://localhost:8081> (admin user: `admin`)
+- Analytics (Umami): <http://localhost:3001> (configure on first visit)
+
+Operational scripts:
+
+- `npm run dev:check` — ping every service, print a status table, non-zero on any failure
+- `npm run db:reset` — wipe the local DB and dev uploads, then re-seed (prompts unless `--yes`)
+- `npm run dev:stop` — shut down the Docker services
+
+WebAuthn uses `rpID=localhost` in dev, so passkeys work without HTTPS on
+every browser. Register one from **Settings → Security** after first login.
+
 ## The Stack
 
 - **Site Generator**: Hugo (compiles Markdown into ultra-fast static HTML)

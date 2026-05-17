@@ -19,9 +19,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const router = Router();
 
 // Config
-const RP_NAME = 'Terminal Eighty CMS';
-const RP_ID = process.env.RP_ID || 'localhost';
-const ORIGIN = process.env.ORIGIN || 'http://localhost:3000';
+// Env-var precedence: prefer the WEBAUTHN_* names (Phase 5d dev stack)
+// but fall back to the production compose names (RP_ID / ORIGIN) for
+// backward compatibility.
+const RP_NAME = process.env.WEBAUTHN_RP_NAME || 'Terminal Eighty CMS';
+const RP_ID = process.env.WEBAUTHN_RP_ID || process.env.RP_ID || 'localhost';
+const ORIGIN = process.env.WEBAUTHN_ORIGIN || process.env.ORIGIN || 'http://localhost:3000';
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Database

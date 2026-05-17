@@ -31,6 +31,14 @@
     "build:check": "cd site && hugo --gc --minify --printPathWarnings && cd .. && npm run lint:html-site",
     "dev:site": "cd site && hugo server -D --port 1414 --bind 127.0.0.1",
     "dev:admin": "cd admin && npm run dev",
+    "dev:hugo": "cd site && hugo server --port 1313 --bind 127.0.0.1 --buildDrafts --buildFuture",
+    "dev:docker": "docker compose -f docker/docker-compose.dev.yml up",
+    "dev:docker:detach": "docker compose -f docker/docker-compose.dev.yml up -d",
+    "dev:stop": "docker compose -f docker/docker-compose.dev.yml down",
+    "dev:all": "run-p -l dev:docker dev:hugo dev:admin",
+    "dev:check": "node scripts/dev/check.mjs",
+    "db:seed": "node scripts/dev/seed.mjs",
+    "db:reset": "node scripts/dev/reset.mjs",
     "prepare": "husky || true && npm run build:editor --silent || true"
   },
   "devDependencies": {
