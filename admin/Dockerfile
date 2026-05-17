@@ -10,12 +10,15 @@ FROM node:20-alpine
 #   ffmpeg             — Phase 5b video/audio/animated-GIF transcode.
 #                       Alpine's ffmpeg build includes libx264, libvpx,
 #                       libmp3lame, libopus, and the loudnorm filter.
+#   poppler-utils      — Phase 5c PDF preview generation (pdfinfo /
+#                       pdftoppm). Ships a JPEG renderer + metadata
+#                       extractor; ~20 MB image overhead on Alpine.
 # sharp ships prebuilts for musl-arm64, but bundling vips/libheif keeps
 # the fallback build path working and provides the heif decoder libvips
 # dlopens at runtime.
 RUN apk add --no-cache git procps python3 make g++ \
     vips vips-tools vips-dev libheif libheif-tools \
-    ffmpeg
+    ffmpeg poppler-utils
 
 WORKDIR /app
 

@@ -17,7 +17,7 @@
  * can patch width/height/duration/mime_type on the media row.
  */
 
-import { dirname, join } from 'path';
+import { dirname, extname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
 
@@ -25,23 +25,12 @@ import { processImage } from './image.js';
 import { processVideo } from './video.js';
 import { processAudio } from './audio.js';
 import { processGifVideo } from './gif.js';
+import { processPdf } from './pdf.js';
+import { processCode } from './code.js';
+import { processArchive } from './archive.js';
 import { classifyMime } from '../../utils/mediaTypes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-/**
- * Placeholder factory for handlers we haven't implemented yet. Phase 5c
- * will swap these out. We deliberately throw so a misrouted job (e.g.
- * an image upload that someone enqueued as 'pdf') is loud rather than
- * silently appearing successful.
- *
- * @param {string} kind
- */
-function notImplemented(kind) {
-  return async function notImplementedHandler() {
-    throw new Error(`Conversion handler not yet implemented: ${kind}`);
-  };
-}
 
 /**
  * Handler registry. Keys mirror the `type` column in `conversion_jobs`.
@@ -54,11 +43,66 @@ export const handlers = {
   video: processVideo,
   audio: processAudio,
   gif: processGifVideo,
-  // Phase 5c — PDF text-extraction, code highlighting, archive listing.
-  pdf: notImplemented('pdf'),
-  code: notImplemented('code'),
-  archive: notImplemented('archive'),
+  // Phase 5c — PDF cover/thumb (poppler), source-file syntax highlight
+  // (shiki), archive entry listing (yauzl).
+  pdf: processPdf,
+  code: processCode,
+  archive: processArchive,
 };
+
+/**
+ * Extensions that route to the `code` handler. Detection is purely by
+ * filename suffix — many code uploads arrive with `application/
+ * octet-stream` from browsers that don't recognize the type, so MIME
+ * sniffing isn't reliable here.
+ *
+ * @type {ReadonlySet<string>}
+ */
+export const CODE_EXTENSIONS = new Set([
+  '.js',
+  '.ts',
+  '.jsx',
+  '.tsx',
+  '.py',
+  '.go',
+  '.rs',
+  '.rb',
+  '.java',
+  '.c',
+  '.cc',
+  '.cpp',
+  '.h',
+  '.hpp',
+  '.cs',
+  '.php',
+  '.html',
+  '.css',
+  '.scss',
+  '.json',
+  '.yml',
+  '.yaml',
+  '.toml',
+  '.md',
+  '.txt',
+  '.sh',
+  '.bash',
+  '.sql',
+  '.diff',
+  '.patch',
+]);
+
+/**
+ * True iff the filename's extension is in the code allowlist. The
+ * upload denylist (`.sh`, `.bash`, etc. would actually block shell
+ * scripts at the multer layer) takes precedence — the media route
+ * still calls `isDeniedExtension` first.
+ *
+ * @param {string} filename
+ */
+export function isCodeFile(filename) {
+  const ext = extname(String(filename || '')).toLowerCase();
+  return CODE_EXTENSIONS.has(ext);
+}
 
 /**
  * Take a job row + DB handle, find the media row, and compute the

@@ -9,7 +9,7 @@
     "dev": "node --watch server.js",
     "build:editor": "NODE_ENV=production node scripts/build-editor.mjs",
     "dev:editor": "node scripts/build-editor.mjs --watch",
-    "test": "node --test --test-reporter spec test/auth.test.js test/media.test.js test/conversion.test.js test/conversion-av.test.js",
+    "test": "node --test --test-reporter spec test/auth.test.js test/media.test.js test/conversion.test.js test/conversion-av.test.js test/conversion-pdc.test.js",
     "lint": "cd .. && npm run lint:js -- admin/"
   },
   "dependencies": {
@@ -56,10 +56,12 @@
     "prosemirror-markdown": "^1.13.4",
     "prosemirror-model": "^1.25.6",
     "sharp": "^0.34.5",
+    "shiki": "^4.0.2",
     "simple-git": "^3.27.0",
     "tippy.js": "^6.3.7",
     "tiptap-extension-global-drag-handle": "^0.1.18",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "yauzl": "^3.3.0"
   },
   "devDependencies": {
     "esbuild": "^0.28.0"
