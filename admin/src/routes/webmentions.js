@@ -391,7 +391,16 @@ publicRouter.get('/feed', (req, res) => {
       received_at: r.received_at,
     };
 
-    const bucket = `${r.type}s`;
+    // Map mention type → output bucket. We can't naively `${type}s` because
+    // 'reply' → 'replys' (wrong plural). All other types pluralize cleanly.
+    const bucketMap = {
+      reply: 'replies',
+      like: 'likes',
+      repost: 'reposts',
+      bookmark: 'bookmarks',
+      mention: 'mentions',
+    };
+    const bucket = bucketMap[r.type] || 'mentions';
     if (Array.isArray(out[bucket])) {
       // eslint-disable-next-line security/detect-object-injection -- bucket is one of the predefined keys above
       out[bucket].push(shaped);

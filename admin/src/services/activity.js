@@ -108,7 +108,11 @@ export function recentActivity(opts) {
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const rows = db()
     .prepare(
-      `SELECT id, ts, user, action, target, meta_json FROM activity_log ${whereSql} ORDER BY ts DESC LIMIT ?`,
+      // rowid DESC tiebreaker because flushes may write multiple rows in
+      // the same millisecond and our public id is a random nanoid (not
+      // monotonic). SQLite's implicit rowid IS monotonic — newest row
+      // always has the highest rowid.
+      `SELECT id, ts, user, action, target, meta_json FROM activity_log ${whereSql} ORDER BY ts DESC, rowid DESC LIMIT ?`,
     )
     .all(...args, limit);
   return rows.map((r) => ({

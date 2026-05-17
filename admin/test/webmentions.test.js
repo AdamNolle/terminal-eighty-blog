@@ -30,8 +30,16 @@ let adminApp;
 let adminUrl;
 let tempDir;
 let siteDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 let publicRouter;
 let adminRouter;
@@ -132,11 +140,11 @@ after(async () => {
 
 // ── normaliseUrl (pure) ──────────────────────────────────────────────
 
-test('normaliseUrl strips fragment + trailing slash', { skip }, () => {
+test('normaliseUrl strips fragment + trailing slash', skipOpts(), () => {
   assert.equal(normaliseUrl('https://Example.com/Foo/#anchor'), 'https://example.com/Foo');
 });
 
-test('normaliseUrl tolerates already-normalised URLs', { skip }, () => {
+test('normaliseUrl tolerates already-normalised URLs', skipOpts(), () => {
   assert.equal(
     normaliseUrl('https://terminaleighty.com/hello'),
     'https://terminaleighty.com/hello',
@@ -145,7 +153,7 @@ test('normaliseUrl tolerates already-normalised URLs', { skip }, () => {
 
 // ── parseSource (pure) ───────────────────────────────────────────────
 
-test('parseSource detects in-reply-to + author from h-entry', { skip }, () => {
+test('parseSource detects in-reply-to + author from h-entry', skipOpts(), () => {
   const target = 'https://terminaleighty.com/hello/';
   const html = `<!doctype html><html><body>
     <article class="h-entry">
@@ -167,7 +175,7 @@ test('parseSource detects in-reply-to + author from h-entry', { skip }, () => {
   assert.match(out.content, /Nice post/);
 });
 
-test('parseSource detects like-of', { skip }, () => {
+test('parseSource detects like-of', skipOpts(), () => {
   const target = 'https://terminaleighty.com/hello/';
   const html = `<article class="h-entry">
     <a class="u-like-of" href="${target}">★</a>
@@ -179,7 +187,7 @@ test('parseSource detects like-of', { skip }, () => {
   assert.equal(out.author.name, 'Bob');
 });
 
-test('parseSource detects repost-of', { skip }, () => {
+test('parseSource detects repost-of', skipOpts(), () => {
   const target = 'https://terminaleighty.com/hello/';
   const html = `<article class="h-entry">
     <a class="u-repost-of" href="${target}">re</a>
@@ -188,7 +196,7 @@ test('parseSource detects repost-of', { skip }, () => {
   assert.equal(out.type, 'repost');
 });
 
-test('parseSource detects bookmark-of', { skip }, () => {
+test('parseSource detects bookmark-of', skipOpts(), () => {
   const target = 'https://terminaleighty.com/hello/';
   const html = `<article class="h-entry">
     <a class="u-bookmark-of" href="${target}">bookmark</a>
@@ -197,7 +205,7 @@ test('parseSource detects bookmark-of', { skip }, () => {
   assert.equal(out.type, 'bookmark');
 });
 
-test('parseSource falls back to plain mention with link', { skip }, () => {
+test('parseSource falls back to plain mention with link', skipOpts(), () => {
   const target = 'https://terminaleighty.com/hello/';
   const html = `<!doctype html><html><body>
     <p>I read <a href="${target}">this thing</a> and liked it.</p>
@@ -207,7 +215,7 @@ test('parseSource falls back to plain mention with link', { skip }, () => {
   assert.equal(out.linksToTarget, true);
 });
 
-test('parseSource flags no-link source as not linking', { skip }, () => {
+test('parseSource flags no-link source as not linking', skipOpts(), () => {
   const target = 'https://terminaleighty.com/hello/';
   const html = `<!doctype html><html><body><p>No reference here.</p></body></html>`;
   const out = parseSource(html, 'https://eve.example/diary/2', target);
@@ -216,7 +224,7 @@ test('parseSource flags no-link source as not linking', { skip }, () => {
 
 // ── validatePair (pure) ──────────────────────────────────────────────
 
-test('POST rejects missing fields with 400', { skip }, async () => {
+test('POST rejects missing fields with 400', skipOpts(), async () => {
   const res = await fetch(`${publicUrl}/webmention`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -225,7 +233,7 @@ test('POST rejects missing fields with 400', { skip }, async () => {
   assert.equal(res.status, 400);
 });
 
-test('POST rejects http target with 400', { skip }, async () => {
+test('POST rejects http target with 400', skipOpts(), async () => {
   const res = await fetch(`${publicUrl}/webmention`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -237,7 +245,7 @@ test('POST rejects http target with 400', { skip }, async () => {
   assert.equal(res.status, 400);
 });
 
-test('POST rejects target on a foreign host with 400', { skip }, async () => {
+test('POST rejects target on a foreign host with 400', skipOpts(), async () => {
   const res = await fetch(`${publicUrl}/webmention`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -249,7 +257,7 @@ test('POST rejects target on a foreign host with 400', { skip }, async () => {
   assert.equal(res.status, 400);
 });
 
-test('POST rejects source==target with 400', { skip }, async () => {
+test('POST rejects source==target with 400', skipOpts(), async () => {
   const res = await fetch(`${publicUrl}/webmention`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -265,7 +273,7 @@ test('POST rejects source==target with 400', { skip }, async () => {
 
 test(
   'POST /webmention accepted source links back → approved after validate',
-  { skip },
+  skipOpts(),
   async () => {
     const target = 'https://terminaleighty.com/hello-world/';
     const source = 'https://alice.example/posts/1';
@@ -304,7 +312,7 @@ test(
   },
 );
 
-test('validateMention rejects when source body has no back-link', { skip }, async () => {
+test('validateMention rejects when source body has no back-link', skipOpts(), async () => {
   const target = 'https://terminaleighty.com/hello-world/';
   const source = 'https://eve.example/no-link';
   resetFetch();
@@ -320,7 +328,7 @@ test('validateMention rejects when source body has no back-link', { skip }, asyn
   assert.equal(row.status, 'rejected');
 });
 
-test('validateMention rejects when source fetch fails', { skip }, async () => {
+test('validateMention rejects when source fetch fails', skipOpts(), async () => {
   const target = 'https://terminaleighty.com/hello-world/';
   const source = 'https://fails.example/404';
   resetFetch();
@@ -338,7 +346,7 @@ test('validateMention rejects when source fetch fails', { skip }, async () => {
 
 // ── Admin approve / reject / feed ────────────────────────────────────
 
-test('admin approve + feed surfaces the mention', { skip }, async () => {
+test('admin approve + feed surfaces the mention', skipOpts(), async () => {
   // Find the first approved-eligible row: the one from the
   // "approved after validate" test above (id known via list).
   const list = await (await fetch(`${adminUrl}/api/webmentions`)).json();
@@ -365,7 +373,7 @@ test('admin approve + feed surfaces the mention', { skip }, async () => {
   assert.equal(feed.replies[0].author.name, 'Alice');
 });
 
-test('admin reject hides from feed', { skip }, async () => {
+test('admin reject hides from feed', skipOpts(), async () => {
   const list = await (await fetch(`${adminUrl}/api/webmentions?status=approved`)).json();
   assert.ok(list.length > 0);
   const reply = list[0];
@@ -378,7 +386,7 @@ test('admin reject hides from feed', { skip }, async () => {
   assert.equal(feed.count, 0);
 });
 
-test('admin delete removes the row entirely', { skip }, async () => {
+test('admin delete removes the row entirely', skipOpts(), async () => {
   const beforeRows = await (await fetch(`${adminUrl}/api/webmentions`)).json();
   const target = beforeRows[0];
   const r = await fetch(`${adminUrl}/api/webmentions/${target.id}`, { method: 'DELETE' });
@@ -389,7 +397,7 @@ test('admin delete removes the row entirely', { skip }, async () => {
 
 // ── dump-webmentions ────────────────────────────────────────────────
 
-test('dumpWebmentions groups approved rows by slug', { skip }, async () => {
+test('dumpWebmentions groups approved rows by slug', skipOpts(), async () => {
   // Seed two approved replies on different posts.
   const target1 = 'https://terminaleighty.com/post-a/';
   const target2 = 'https://terminaleighty.com/post-b/';
@@ -430,7 +438,7 @@ test('dumpWebmentions groups approved rows by slug', { skip }, async () => {
   assert.equal(aPayload.replies[0].author.name, 'Alice');
 });
 
-test('slugFromTarget extracts first path segment', { skip }, () => {
+test('slugFromTarget extracts first path segment', skipOpts(), () => {
   assert.equal(slugFromTarget('https://terminaleighty.com/hello-world/'), 'hello-world');
   assert.equal(slugFromTarget('https://terminaleighty.com/hello-world'), 'hello-world');
   assert.equal(slugFromTarget('https://terminaleighty.com/'), '__home__');

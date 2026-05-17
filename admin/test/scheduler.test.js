@@ -11,8 +11,16 @@ import { join } from 'node:path';
 
 let tempDir;
 let postsDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 before(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 't80-sched-test-'));
@@ -44,7 +52,7 @@ after(async () => {
   }
 });
 
-test('promotes posts whose publish_at is past', { skip }, async () => {
+test('promotes posts whose publish_at is past', skipOpts(), async () => {
   const past = new Date(Date.now() - 60 * 1000).toISOString();
   writeFileSync(
     join(postsDir, 'past.md'),
@@ -66,7 +74,7 @@ test('promotes posts whose publish_at is past', { skip }, async () => {
   assert.match(future2, /draft: true/);
 });
 
-test('dry-run does not write', { skip }, async () => {
+test('dry-run does not write', skipOpts(), async () => {
   const past = new Date(Date.now() - 1000).toISOString();
   writeFileSync(
     join(postsDir, 'dry.md'),
@@ -79,7 +87,7 @@ test('dry-run does not write', { skip }, async () => {
   assert.match(raw, /draft: true/);
 });
 
-test('invokes the commit callback once when posts are promoted', { skip }, async () => {
+test('invokes the commit callback once when posts are promoted', skipOpts(), async () => {
   // Reset by writing a fresh post that needs promotion.
   const past = new Date(Date.now() - 1000).toISOString();
   writeFileSync(

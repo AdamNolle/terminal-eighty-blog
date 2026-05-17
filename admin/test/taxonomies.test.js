@@ -13,8 +13,16 @@ let server;
 let baseUrl;
 let tempDir;
 let postsDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 function writePost(slug, tags) {
   const fm = `---\ntitle: ${JSON.stringify(slug)}\ndraft: false\ntags: [${tags.map((t) => JSON.stringify(t)).join(', ')}]\n---\n\nbody\n`;
@@ -68,14 +76,14 @@ after(async () => {
   }
 });
 
-test('GET tags returns counts', { skip }, async () => {
+test('GET tags returns counts', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/taxonomies/tags`);
   const list = await res.json();
   const foo = list.find((t) => t.name === 'foo');
   assert.equal(foo.count, 2);
 });
 
-test('rename rewrites tags across posts', { skip }, async () => {
+test('rename rewrites tags across posts', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/taxonomies/tags/rename`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -89,7 +97,7 @@ test('rename rewrites tags across posts', { skip }, async () => {
   assert.doesNotMatch(aRaw, /foo/);
 });
 
-test('merge folds multiple tags into one', { skip }, async () => {
+test('merge folds multiple tags into one', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/taxonomies/tags/merge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -101,12 +109,12 @@ test('merge folds multiple tags into one', { skip }, async () => {
   assert.doesNotMatch(aRaw, /Foundry/);
 });
 
-test('delete refuses without force when in use', { skip }, async () => {
+test('delete refuses without force when in use', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/taxonomies/tags/qux`, { method: 'DELETE' });
   assert.equal(res.status, 409);
 });
 
-test('delete with force strips the tag', { skip }, async () => {
+test('delete with force strips the tag', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/taxonomies/tags/qux?force=true`, { method: 'DELETE' });
   assert.equal(res.status, 200);
   const cRaw = readFileSync(join(postsDir, 'c.md'), 'utf-8');

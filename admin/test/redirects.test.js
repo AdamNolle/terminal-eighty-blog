@@ -13,8 +13,16 @@ let server;
 let baseUrl;
 let tempDir;
 let siteDir;
-let skipReason = null;
-const skip = () => skipReason;
+let skipReason = false;
+
+// Node 22+ test runner skips when skip is ANY non-false/undefined value
+// (including null or a function). Use a getter so the live value of
+// skipReason — set later in before() — is read at test-run time.
+const skipOpts = () => ({
+  get skip() {
+    return skipReason;
+  },
+});
 
 before(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 't80-redir-test-'));
@@ -58,14 +66,14 @@ after(async () => {
   }
 });
 
-test('GET returns empty array by default', { skip }, async () => {
+test('GET returns empty array by default', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/redirects`);
   assert.equal(res.status, 200);
   const list = await res.json();
   assert.deepEqual(list, []);
 });
 
-test('POST creates a redirect with id', { skip }, async () => {
+test('POST creates a redirect with id', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/redirects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -79,7 +87,7 @@ test('POST creates a redirect with id', { skip }, async () => {
   assert.equal(body.code, 301);
 });
 
-test('POST refuses duplicate from', { skip }, async () => {
+test('POST refuses duplicate from', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/redirects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -88,13 +96,13 @@ test('POST refuses duplicate from', { skip }, async () => {
   assert.equal(res.status, 409);
 });
 
-test('GET returns the created rows', { skip }, async () => {
+test('GET returns the created rows', skipOpts(), async () => {
   const res = await fetch(`${baseUrl}/api/redirects`);
   const list = await res.json();
   assert.equal(list.length, 1);
 });
 
-test('DELETE removes a redirect', { skip }, async () => {
+test('DELETE removes a redirect', skipOpts(), async () => {
   const list = await (await fetch(`${baseUrl}/api/redirects`)).json();
   const id = list[0].id;
   const res = await fetch(`${baseUrl}/api/redirects/${id}`, { method: 'DELETE' });
@@ -103,7 +111,7 @@ test('DELETE removes a redirect', { skip }, async () => {
   assert.equal(after.length, 0);
 });
 
-test('shortcode docs scan extracts doc + usage', { skip }, async () => {
+test('shortcode docs scan extracts doc + usage', skipOpts(), async () => {
   const { writeFileSync } = await import('node:fs');
   writeFileSync(
     join(siteDir, 'layouts', 'shortcodes', 'demo.html'),
