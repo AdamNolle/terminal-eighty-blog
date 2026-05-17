@@ -607,3 +607,139 @@ will wrap the whole body in an `e-content` element; the embed buttons
 are plain HTML descendants and do not break that contract. The
 generic OG card is already an `<a>` with `rel="noopener external"` —
 Phase 8 can layer `u-bookmark-of` on top without changing this file.
+
+## Phase 8 — Fediverse federation via Bridgy Fed
+
+Terminal Eighty federates as `@blog@terminaleighty.com` to all of
+ActivityPub-land WITHOUT running its own ActivityPub server. The trick
+is [Bridgy Fed](https://fed.brid.gy) — it bridges any IndieWeb-shaped
+site (microformats2 + webmentions + webfinger) onto the Fediverse.
+
+### Discovery surfaces
+
+Three pieces of plumbing make the site federation-discoverable:
+
+1. **Microformats2 on every post.** `single.html` carries `h-entry`,
+   `p-name`, `dt-published`, `e-content`, `u-url`, `p-author h-card`,
+   and `p-category` — Bridgy Fed parses these to construct the
+   ActivityPub `Note`. The author block expands to a full `h-card`
+   (via `partials/h-card.html`) with `rel="me"` social links so the
+   identity loop is verifiable.
+2. **`/.well-known/webfinger`.** Hugo renders this from
+   `layouts/index.webfinger` via a custom output format that maps
+   `application/jrd+json` → no file suffix. The response declares
+   `acct:blog@terminaleighty.com` and points `rel=self` at
+   `https://fed.brid.gy/web/terminaleighty.com`, so any Fediverse
+   server resolving the handle delegates the inbox/outbox to Bridgy
+   Fed.
+3. **`<link rel="webmention" …>` in `<head>`.** Advertises
+   `https://admin.terminaleighty.com/webmention` so senders (Bridgy
+   Fed, Webmention.io, mention.tech, …) can deliver replies.
+
+### Webmention receiver
+
+`admin/src/routes/webmentions.js` implements the
+[W3C Webmention spec](https://www.w3.org/TR/webmention/):
+
+| Endpoint                             | Purpose                                               |
+| ------------------------------------ | ----------------------------------------------------- |
+| `POST /webmention`                   | Public ping receiver. Returns 202 + Location header.  |
+| `GET  /webmention/:id`               | Public status of a single ping.                       |
+| `GET  /webmention/feed?target=<url>` | Public JSON feed of approved mentions for one target. |
+| `GET  /api/webmentions[?status=]`    | Admin moderation list (session-cookie auth).          |
+| `POST /api/webmentions/:id/approve`  | Flip status to `approved`.                            |
+| `POST /api/webmentions/:id/reject`   | Flip status to `rejected`.                            |
+| `DELETE /api/webmentions/:id`        | Drop the row entirely (purge).                        |
+
+Validation flow (per row):
+
+1. POST arrives → row inserted with `status='pending'`.
+2. `setImmediate` validator fetches the source (8-second timeout,
+   5-MB cap, `redirect: 'follow'`, https-only).
+3. Source HTML is parsed by `services/microformats.js` (mf2-parser).
+   We detect `u-in-reply-to` / `u-like-of` / `u-repost-of` /
+   `u-bookmark-of` against the target; fall back to plain `<a>` back-link
+   detection if no microformats are present.
+4. Author is read from the matched h-entry's `p-author h-card`, or
+   the document's `h-card`, or `rel="author"`, or finally the source
+   host as a label.
+5. Row is updated with type + author + content. Default new state is
+   `pending` (admin moderates); set `WEBMENTION_AUTO_APPROVE=1` to
+   auto-publish anything that survives back-link validation.
+
+`status='rejected'` rows store the rejection reason (`fetch_failed:
+…` or `no_link_back`) in `raw_html` for debugging.
+
+### Build-time rendering
+
+Hugo doesn't talk to the CMS at build time, so we materialise
+approved mentions to disk via `admin/src/services/dump-webmentions.js`.
+It groups by slug (first non-empty URL path segment) and writes
+`site/data/webmentions/<slug>.json`; the partial
+`partials/webmentions.html` reads `hugo.Data.webmentions[slug]` and
+renders replies + aggregated likes/reposts inline above the Remark42
+comments block.
+
+On the Pi, install the cron alongside the scheduled-posts cron:
+
+```bash
+*/5 * * * * /opt/terminal-eighty/scripts/dump-webmentions.sh \
+    >> /var/log/terminal-eighty-webmentions.log 2>&1
+```
+
+`scripts/maintenance.sh` also runs the dumper as a daily safety net.
+
+### One-time Bridgy Fed setup
+
+After this phase ships, do these manually on
+[fed.brid.gy](https://fed.brid.gy):
+
+1. Sign in (the site OAuth's against a domain you control — sign in
+   with your IndieAuth-on-terminaleighty.com identity, or use a
+   bootstrap site like silo.computer if the IndieAuth piece is not
+   live yet).
+2. Visit `https://fed.brid.gy/web/terminaleighty.com` and click
+   **Federate this site to the Fediverse**.
+3. Confirm the discovery checklist: Bridgy Fed shows ✅ for h-card,
+   webfinger, and webmention endpoint. If any fail, hit the
+   "Re-fetch" button after the next `hugo --gc --minify`.
+4. From any Mastodon / Pixelfed / Akkoma / etc. account, search for
+   `@blog@terminaleighty.com` — it should appear with the h-card
+   avatar + bio. Click **Follow**.
+5. Post a reply to any post page (Mastodon will fetch the post page
+   and convert the reply into a `Create Note` activity targeted at
+   our actor). Bridgy Fed forwards it as a webmention to
+   `https://admin.terminaleighty.com/webmention`.
+
+### Adding a new social `rel="me"` link
+
+Edit `site/data/author.json`:
+
+```json
+{
+  "name": "Terminal Eighty",
+  "bio": "Tech it like I talk (write) it.",
+  "avatar": "https://terminaleighty.com/images/avatar.png",
+  "url": "https://terminaleighty.com",
+  "social": {
+    "bluesky": "https://bsky.app/profile/terminaleighty.com",
+    "mastodon": "https://mastodon.social/@terminaleighty",
+    "github": "https://github.com/AdamNolle",
+    "youtube": "https://www.youtube.com/@TerminalEighty"
+  }
+}
+```
+
+The `h-card.html` partial picks every entry up automatically and
+emits a `rel="me"` link in the footer h-card on every page. The
+remote profile MUST link back to `terminaleighty.com` (any `rel="me"`
+or plain `<a href>`) for the verification loop to close — Bridgy Fed
+won't trust an unverified social identity.
+
+### Future Phase 8.5 — comment moderation UI
+
+The admin moderation endpoints (`/api/webmentions/:id/{approve,reject}`)
+land in Phase 8 with no UI. Phase 8.5 will surface them inside the
+existing admin shell, alongside (or unified with) the Remark42
+comment-moderation flow — likely as a new tab under `/api/comments`
+that proxies Remark42's REST surface plus our `webmentions` table.

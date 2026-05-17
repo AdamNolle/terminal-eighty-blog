@@ -48,6 +48,17 @@
 <link rel="alternate" type="application/rss+xml" title="{{ site.Title }} — All posts" href="{{ "/index.xml" | relURL }}" />
 <link rel="sitemap" type="application/xml" href="{{ "/sitemap.xml" | relURL }}" />
 
+{{- /* Phase 8 — Webmention + Pingback endpoint discovery. Site-wide
+       so any page (post, list, taxonomy) can receive a webmention.
+       Sender clients (Bridgy Fed, indieweb.org's mention.tech,
+       Webmention.io, etc.) discover the endpoint via this `<link>`
+       OR a matching `Link:` header — we ship the `<link>` form so
+       it survives GitHub Pages (no custom headers available there).
+       The endpoint is hosted on the admin's subdomain, behind Caddy
+       (see `docker/Caddyfile` — Phase 8 added the route). */ -}}
+{{- $webmentionEndpoint := site.Params.webmentionURL | default "https://admin.terminaleighty.com/webmention" }}
+<link rel="webmention" href="{{ $webmentionEndpoint }}" />
+
 {{/* Favicon */}}
 <link rel="icon" type="image/png" href="{{ "images/logo.png" | relURL }}" />
 

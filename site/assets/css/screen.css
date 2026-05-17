@@ -2666,3 +2666,190 @@ main:focus:not(:focus-visible) {
     transition: none;
   }
 }
+
+/* ============================================================
+   18. WEBMENTIONS  (Phase 8 — Fediverse + IndieWeb replies)
+   ============================================================ */
+
+.webmentions {
+  margin: 40px 0 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line, currentColor);
+  font-family: var(--mono, monospace);
+}
+.webmentions-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim, currentColor);
+  margin: 0 0 18px;
+}
+.webmentions-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, currentColor);
+  box-shadow: 0 0 8px var(--accent-glow, transparent);
+}
+.webmentions-count {
+  color: var(--fg-mute, currentColor);
+  font-weight: 400;
+}
+.webmentions-reactions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.webmentions-faces {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-dim, currentColor);
+}
+.webmentions-faces-label {
+  margin-right: 4px;
+}
+.webmentions-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-elev, transparent);
+  border: 1px solid var(--line, currentColor);
+  text-decoration: none;
+  transition: border-color 120ms ease;
+}
+.webmentions-face:hover,
+.webmentions-face:focus-visible {
+  border-color: var(--accent, currentColor);
+  outline: none;
+}
+.webmentions-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.webmentions-face-fallback {
+  font-size: 11px;
+  color: var(--fg-mute, currentColor);
+  text-transform: uppercase;
+}
+.webmentions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.webmention {
+  padding: 14px 16px;
+  border: 1px solid var(--line, currentColor);
+  border-radius: 4px;
+  background: var(--bg-card, transparent);
+}
+.webmention-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.webmention-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-elev, transparent);
+  border: 1px solid var(--line, currentColor);
+  flex: 0 0 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--fg-mute, currentColor);
+  text-transform: uppercase;
+}
+.webmention-byline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+.webmention-author a {
+  color: var(--fg, currentColor);
+  text-decoration: none;
+  border-bottom: 1px dotted transparent;
+}
+.webmention-author a:hover {
+  border-bottom-color: var(--accent, currentColor);
+}
+.webmention-time {
+  color: var(--fg-mute, currentColor);
+  text-decoration: none;
+}
+.webmention-time:hover {
+  color: var(--accent, currentColor);
+}
+.webmention-content {
+  font-family: var(--sans, system-ui);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--fg, currentColor);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.webmentions-mentions {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.webmentions-mentions a {
+  color: var(--fg-dim, currentColor);
+  text-decoration: none;
+  border-bottom: 1px dotted transparent;
+}
+.webmentions-mentions a:hover {
+  color: var(--accent, currentColor);
+  border-bottom-color: var(--accent, currentColor);
+}
+
+/* h-card partial — invisible by default (used for microformats
+   discovery). The `.h-card-follow` link inside the non-compact
+   variant is the only visible affordance, surfaced when callers
+   pass `compact=false`. */
+.footer-hcard {
+  display: none;
+}
+.h-card--compact .p-note,
+.h-card--compact .h-card-follow {
+  display: none;
+}
+.h-card-social {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+}
+.h-card-follow a {
+  color: var(--accent, currentColor);
+  text-decoration: none;
+  border-bottom: 1px dotted currentcolor;
+}
