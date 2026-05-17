@@ -54,6 +54,7 @@ import { mkdirSync } from 'fs';
 import { parseSource, normaliseUrl } from '../services/microformats.js';
 import { logActivity } from '../services/activity.js';
 import { broadcast as sseBroadcast } from '../services/sse.js';
+import { webUrlToAtUri } from '../services/bluesky.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -85,6 +86,8 @@ function db() {
   dbHandle = new Database(dbPath);
   dbHandle.pragma('journal_mode = WAL');
   // Migration runner creates this at boot; safety net for direct-import tests.
+  // Phase 9 added `bluesky_uri` — kept in this safety net so direct-import
+  // tests don't need to run the migration runner first.
   dbHandle.exec(`
     CREATE TABLE IF NOT EXISTS webmentions (
       id TEXT PRIMARY KEY,
@@ -98,12 +101,20 @@ function db() {
       received_at INTEGER NOT NULL,
       validated_at INTEGER,
       status TEXT NOT NULL DEFAULT 'pending',
-      raw_html TEXT
+      raw_html TEXT,
+      bluesky_uri TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_wm_target_status
       ON webmentions(target, status, received_at DESC);
     CREATE INDEX IF NOT EXISTS idx_wm_status ON webmentions(status);
   `);
+  // If the table already existed without bluesky_uri (older test DBs),
+  // ALTER it in. Wrapped in try/catch because the column may already exist.
+  try {
+    dbHandle.exec(`ALTER TABLE webmentions ADD COLUMN bluesky_uri TEXT`);
+  } catch (_) {
+    /* column already present — fine */
+  }
   return dbHandle;
 }
 
@@ -287,14 +298,18 @@ publicRouter.post('/', async (req, res) => {
     return res.status(v.status).json({ error: v.error });
   }
   const id = nanoid();
+  // Phase 9: detect bsky.app source URLs and capture the AT URI so the
+  // admin can mirror replies back to the Bluesky thread later. NULL is
+  // the common case (Bridgy Fed forwards Mastodon webmentions).
+  const blueskyUri = webUrlToAtUri(v.source);
   try {
     db()
       .prepare(
         `INSERT INTO webmentions
-            (id, source, target, type, received_at, status)
-         VALUES (?, ?, ?, 'mention', ?, 'pending')`,
+            (id, source, target, type, received_at, status, bluesky_uri)
+         VALUES (?, ?, ?, 'mention', ?, 'pending', ?)`,
       )
-      .run(id, v.source, v.target, Date.now());
+      .run(id, v.source, v.target, Date.now(), blueskyUri);
   } catch (err) {
     console.warn('[webmention] insert failed:', err && err.message);
     return res.status(500).json({ error: 'storage failed' });
