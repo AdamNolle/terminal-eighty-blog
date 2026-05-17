@@ -4,7 +4,11 @@
  *
  * Three lint surfaces:
  *   - admin/**\/*.js           Node 20 + ES modules ("type": "module" in admin)
- *   - site/static/js/*.js     Browser, IIFE-wrapped
+ *   - site/assets/js/*.js     Browser, IIFE-wrapped (Phase 11: moved
+ *                              from static/js/ so Hugo can fingerprint
+ *                              + SRI through the resources pipeline).
+ *                              site/static/js/ pattern remains so any
+ *                              legacy file would still be linted.
  *   - migrate/**\/*.js         Node 20 CLI tooling
  *
  * Test files get vitest/node-test globals so describe/it/expect resolve.
@@ -148,9 +152,11 @@ export default [
     },
   },
 
-  // Site browser JS
+  // Site browser JS (Phase 11: canonical path is site/assets/js/ —
+  // the static/js/ glob is kept so a stale file in the legacy location
+  // would still be linted, never silently shipped.)
   {
-    files: ['site/static/js/**/*.js'],
+    files: ['site/assets/js/**/*.js', 'site/static/js/**/*.js'],
     plugins: { security },
     languageOptions: {
       ecmaVersion: 2024,

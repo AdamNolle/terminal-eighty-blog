@@ -236,6 +236,18 @@ main:focus:not(:focus-visible) {
   left: 50%;
   animation: drift-c 84s ease-in-out infinite alternate;
 }
+/* Phase 11 — drop the third blob on mobile to keep the GPU budget
+   sensible on lower-tier Android devices. The two remaining blobs
+   still carry the lava aesthetic; the third is a stack-rank "nice to
+   have". prefers-reduced-motion is handled globally in §2 (RESET) —
+   verified again in site/test/perf.test.js. The same rule is
+   duplicated in critical-css.html so the cap applies during the
+   pre-stylesheet paint too. */
+@media (max-width: 720px) {
+  .lava-blob.c {
+    display: none;
+  }
+}
 [data-theme="light"] .lava-blob.a {
   opacity: 0.28;
 }

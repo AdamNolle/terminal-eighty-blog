@@ -38,8 +38,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      include: ['site/static/js/**/*.js', 'admin/public/js/**/*.js'],
-      exclude: ['site/static/js/**/*.test.js'],
+      // Phase 11: JS bundles moved from site/static/js/ → site/assets/js/
+      // so Hugo can fingerprint + SRI them. Coverage still covers both
+      // paths (admin keeps its own static path; nothing should remain
+      // under site/static/js/ but we leave the entry in case a future
+      // ESM-only asset goes there).
+      include: ['site/assets/js/**/*.js', 'site/static/js/**/*.js', 'admin/public/js/**/*.js'],
+      exclude: ['site/assets/js/**/*.test.js', 'site/static/js/**/*.test.js'],
     },
   },
 });

@@ -16,7 +16,11 @@ import { fileURLToPath } from 'node:url';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const APP_JS = readFileSync(join(__dirname, '..', 'static', 'js', 'app.js'), 'utf-8');
+// Phase 11: JS bundles moved from site/static/js/ to site/assets/js/ so
+// Hugo can fingerprint + SRI them through the resources pipeline. The
+// browser still loads /js/<name>.<hash>.js — the move is transparent
+// to users, but the test now reads from the canonical assets path.
+const APP_JS = readFileSync(join(__dirname, '..', 'assets', 'js', 'app.js'), 'utf-8');
 
 function bootApp() {
   // Eval inside the current jsdom window. app.js is an IIFE and self-installs handlers.

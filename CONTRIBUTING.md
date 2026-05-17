@@ -322,6 +322,149 @@ the design calls for a bare icon. Hard errors use
 `role="alert"`; soft hints use `aria-describedby` on the input. See
 `admin/public/login.html` for the canonical example.
 
+## Performance (Phase 11)
+
+The public site targets Lighthouse mobile **Performance ≥ 95** and
+**Accessibility / Best Practices / SEO = 100** on every published route.
+The Phase 1.5 config at `lighthouserc.json` enforces those budgets via
+`@lhci/cli` in CI; locally:
+
+```bash
+npm run test:lighthouse     # full @lhci/cli run, ~2 min, requires Chromium
+LHCI=true npx playwright test test/playwright/lighthouse.spec.js
+```
+
+Fast feedback runs as part of `npm test`: `site/test/perf.test.js`
+asserts the critical-CSS budget, the CSP meta tag, the deferred
+stylesheet shape, and the JS fingerprint contract. If you break one of
+those, the unit suite fails before you ever boot Chromium.
+
+### Critical CSS contract
+
+- `site/layouts/partials/critical-css.html` ships a **single `<style>`
+  block ≤ 3 KB** that paints the first viewport without a layout
+  reflow once the deferred stylesheet lands. Trim the partial back to
+  first-paint essentials before bumping the budget — beyond ~3 KB the
+  inline payload starts costing more TBT / LCP than the round-trip it
+  saves on mobile.
+- The full `site/assets/css/screen.css` loads via
+  `rel="preload" as="style" onload="this.onload=null;this.rel='stylesheet'"`
+  with a `<noscript><link rel="stylesheet">` fallback so search-engine
+  crawlers and JS-disabled browsers still get the design.
+- Both stylesheets are fingerprinted through `resources.Fingerprint` and
+  carry an `integrity=` (SRI) attribute. Cache-busting is automatic;
+  the deploy can serve the hashed filenames with `Cache-Control:
+public, max-age=31536000, immutable`.
+
+### JS bundle layout
+
+- `site/assets/js/{app,embed-loader,lightbox}.js` — canonical source.
+  `baseof.html` calls `resources.Get → resources.Fingerprint` so each
+  ships as `/js/<name>.<hash>.js` with an `integrity=` attribute.
+- Anything under `site/static/js/` is served verbatim with no
+  fingerprint or SRI — keep that directory empty for first-party
+  bundles. The vitest config covers both paths to catch a stale file
+  if a refactor drops one there by accident.
+- Tests load the canonical asset paths
+  (`site/test/{app,embed-loader,lightbox}.test.js`). If you rename a
+  bundle, update the test imports as part of the same commit.
+
+### Image rendering
+
+Every `<img>` we emit MUST carry:
+
+1. `width` + `height` attributes (CLS guard).
+2. `loading="lazy"` for below-the-fold images.
+3. `decoding="async"` so decode happens off the main thread.
+
+The Phase 6 attachment partials (`site/layouts/partials/attachment-*.html`)
+emit a responsive `<picture>` with AVIF / WebP `<source>` sets — the
+Phase 5b conversion pipeline drops the variants into `site/data/media.json`.
+Markdown image syntax (`![]()`) goes through the Phase 11 render hook at
+`site/layouts/_default/_markup/render-image.html`, which automatically:
+
+- Resolves page-resource images and emits intrinsic `width`/`height`.
+- Falls back to a plain `<img loading=lazy decoding=async>` for
+  absolute URLs (the admin's media library writes
+  `/images/yyyy/mm/<file>.png` paths — the attachment shortcode is
+  preferred over raw markdown for those).
+
+For post `cover` images set in front-matter, `single.html`:
+
+- Uses `.Resources.GetMatch` to pull the page-bundled image, then
+  emits a `<picture>` with 320 / 640 / 1024 / 1920 webp variants.
+- Falls back to a plain `<img>` for absolute URLs, optionally honouring
+  `cover_width` + `cover_height` front-matter fields. **Always set
+  both when the admin attaches a cover** so CLS stays at 0.
+
+### Lava blob cap
+
+The third `.lava-blob.c` is hidden via `@media (max-width: 720px)` in
+both `screen.css` and the inline critical-CSS partial. The two
+remaining blobs carry the lava aesthetic without taxing the GPU on
+lower-tier mobile devices. The global `prefers-reduced-motion: reduce`
+rule in `screen.css` §2 (RESET) zeroes the blob animations entirely
+for motion-sensitive users.
+
+### Embeds
+
+All third-party embed providers use the Phase 7 / Phase 9 **click-to-load
+placeholder pattern** — no iframe or third-party script fires until the
+user clicks. The placeholder is a real `<button>` so keyboard + AT
+users get the same affordance. See `site/layouts/shortcodes/embed-*.html`
+for the per-provider templates.
+
+The Phase 8 Bluesky thread embed follows the same pattern, and the
+generic Open Graph card is fully server-rendered (no iframe at all).
+This is why Lighthouse stays green even on pages with several embeds.
+
+### Content Security Policy
+
+`head.html` declares a strict CSP meta tag. The allowlists MUST stay
+in sync with the embed providers under `site/layouts/shortcodes/`:
+
+| Directive         | Allowlist                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| `default-src`     | `'self'`                                                                                                      |
+| `script-src`      | `'self' 'unsafe-inline'` + Remark42, Umami, embed.bsky.app, gist.github.com, www.tiktok.com, cdn.jsdelivr.net |
+| `style-src`       | `'self' 'unsafe-inline'` (inline critical CSS + theme FOUC script require it)                                 |
+| `img-src`         | `'self' data: https:` (third-party thumbnails for YouTube, Vimeo, OG cards)                                   |
+| `font-src`        | `'self'` (self-hosted JetBrains Mono only)                                                                    |
+| `frame-src`       | embed.bsky.app, youtube-nocookie, player.vimeo, www.tiktok, w.soundcloud, open.spotify, codepen.io            |
+| `media-src`       | `'self'` (audio + video attachments only)                                                                     |
+| `connect-src`     | `'self'` + analytics host (XHR posts to Remark42 happen from the iframe origin, not the host page)            |
+| `base-uri`        | `'self'`                                                                                                      |
+| `form-action`     | `'self'`                                                                                                      |
+| `frame-ancestors` | `'self'` (clickjacking guard — no one embeds us in their iframe)                                              |
+
+The `'unsafe-inline'` for `script-src` is intentional: the FOUC theme
+script in `baseof.html` and the JSON-LD blob in `head.html` are both
+server-generated. Moving to a nonce would require runtime header
+injection that the static-host deploy (GitHub Pages today, Caddy on
+the Pi tomorrow) can't reliably set per-request.
+
+When adding a new embed provider:
+
+1. Drop the placeholder shortcode under `site/layouts/shortcodes/embed-<name>.html`.
+2. Extend the `frame-src` (and `script-src` if the loader is a `<script src>`)
+   allowlist in `site/layouts/partials/head.html`.
+3. Update the table above and re-run `npm test`.
+
+### Editor bundle (admin-only)
+
+The admin TipTap + CodeMirror + Shiki bundle at
+`admin/public/js/editor.bundle.js` is **~2.5 MB minified**. It's only
+served behind authenticated admin routes — public Lighthouse never
+loads it — so Phase 11 intentionally did not code-split. If future
+admin perf becomes a constraint, the natural splits are:
+
+- CodeMirror behind the source-mode toggle (lazy-load on first switch).
+- Shiki when a code block is selected.
+- KaTeX is already lazy-loaded from a CDN.
+
+Document the decision in the phase that picks it up; don't ship a
+half-split bundle.
+
 ## Editor shortcuts
 
 The admin post editor (`/editor`) is a dual-mode TipTap + CodeMirror surface.
