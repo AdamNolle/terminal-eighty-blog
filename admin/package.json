@@ -50,7 +50,7 @@
     "markdown-it-container": "^4.0.0",
     "markdown-it-footnote": "^4.0.0",
     "microformats-parser": "^2.0.4",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.1.1",
     "nanoid": "^5.0.9",
     "prosemirror-markdown": "^1.13.4",
     "prosemirror-model": "^1.25.6",
