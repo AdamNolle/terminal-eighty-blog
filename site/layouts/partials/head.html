@@ -4,6 +4,52 @@
 <meta name="theme-color" content="#07090A" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)" />
 
+{{- /* Phase 11 — Content Security Policy.
+
+       The site is mostly first-party — fonts, JS, CSS all self-hosted +
+       fingerprinted. The script-src `'unsafe-inline'` is the cost of
+       the FOUC theme script in baseof.html and the JSON-LD blob below;
+       both are server-generated, never user-input. Moving to a nonce
+       would require runtime header injection, which the static-host
+       deploy (GitHub Pages today, Caddy on the Pi tomorrow) can't
+       reliably set per-request.
+
+       The host allowlists below correspond to:
+         - script-src:  Remark42 (comments embed), Umami (analytics),
+                        embed.bsky.app (Bluesky thread iframe loader),
+                        gist.github.com (GitHub Gist <script src>),
+                        cdn.jsdelivr.net (TikTok's embed.js).
+         - frame-src:   every click-to-load embed provider (see
+                        layouts/shortcodes/embed-*.html for the full
+                        list — Phase 7/9 set this in stone).
+         - img-src:     `https:` so YouTube + Vimeo thumbnails + any
+                        og-card image load (we render Hugo's <img
+                        srcset> for all of those — the only first-party
+                        path for hot-loop content).
+         - connect-src: analytics only — comments/webmentions use the
+                        Remark42 iframe (same-origin from the iframe's
+                        POV), no XHR from the host page.
+         - media-src:   self (audio + video attachments only).
+
+       Update CONTRIBUTING.md → Performance → CSP whenever the
+       allowlist changes. The hosts below MUST stay in sync with
+       site/layouts/shortcodes/embed-*.html. */ -}}
+{{- $remarkOrigin := site.Params.remark42URL | default "" -}}
+{{- $analyticsOrigin := site.Params.umamiURL | default "" -}}
+{{- $cspScript := "'self' 'unsafe-inline' https://gist.github.com https://embed.bsky.app https://www.tiktok.com https://cdn.jsdelivr.net" -}}
+{{- $cspFrame := "https://embed.bsky.app https://www.youtube-nocookie.com https://player.vimeo.com https://www.tiktok.com https://w.soundcloud.com https://open.spotify.com https://codepen.io" -}}
+{{- $cspConnect := "'self'" -}}
+{{- with $remarkOrigin -}}
+  {{- $cspScript = printf "%s %s" $cspScript . -}}
+  {{- $cspFrame = printf "%s %s" $cspFrame . -}}
+  {{- $cspConnect = printf "%s %s" $cspConnect . -}}
+{{- end -}}
+{{- with $analyticsOrigin -}}
+  {{- $cspScript = printf "%s %s" $cspScript . -}}
+  {{- $cspConnect = printf "%s %s" $cspConnect . -}}
+{{- end -}}
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src {{ $cspScript }}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; frame-src {{ $cspFrame }}; media-src 'self'; connect-src {{ $cspConnect }}; base-uri 'self'; form-action 'self'; frame-ancestors 'self'" />
+
 {{- $pageTitle := cond .IsHome site.Title (printf "%s — %s" .Title site.Title) -}}
 <title>{{ $pageTitle }}</title>
 
@@ -62,7 +108,17 @@
 {{/* Favicon */}}
 <link rel="icon" type="image/png" href="{{ "images/logo.png" | relURL }}" />
 
-{{/* Self-hosted JetBrains Mono + critical CSS — fingerprinted via Hugo's assets pipeline when available, else static path */}}
+{{- /* Phase 11 — inline critical CSS first (above-the-fold tokens,
+       reset, layout, header, lava). Keeps first paint render-blocking
+       only on the ~3 KB inlined chunk; the full screen.css loads
+       asynchronously below. */ -}}
+{{ partial "critical-css.html" . }}
+
+{{- /* Self-hosted JetBrains Mono + main stylesheets. CSS goes through
+       the assets pipeline so we get content-hashed filenames + SRI
+       integrity attributes. The main stylesheet uses the rel=preload
+       swap trick so it doesn't block first paint — critical-css.html
+       above already paints the masthead and lava. */ -}}
 {{- $fontsCSS := resources.Get "css/fonts.css" -}}
 {{- $screenCSS := resources.Get "css/screen.css" -}}
 {{- if $screenCSS -}}
@@ -74,14 +130,18 @@
   {{- if $fontsCSS }}
   <link rel="stylesheet" href="{{ $fontsCSS.RelPermalink }}" integrity="{{ $fontsCSS.Data.Integrity }}" />
   {{- end }}
-  <link rel="preload" as="style" href="{{ $screenCSS.RelPermalink }}" />
-  <link rel="stylesheet" href="{{ $screenCSS.RelPermalink }}" integrity="{{ $screenCSS.Data.Integrity }}" />
+  {{- /* Deferred main stylesheet: preload as style, then promote to a
+         live stylesheet on load. The <noscript> fallback ensures the
+         page still styles for users without JS (search-engine
+         crawlers, lynx, etc.). */ -}}
+  <link rel="preload" as="style" href="{{ $screenCSS.RelPermalink }}" integrity="{{ $screenCSS.Data.Integrity }}" onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript><link rel="stylesheet" href="{{ $screenCSS.RelPermalink }}" integrity="{{ $screenCSS.Data.Integrity }}" /></noscript>
 {{- else -}}
   {{/* Fallback: serve from /static directly (no fingerprint) */}}
   <link rel="preload" as="font" type="font/woff2" href="{{ "fonts/JetBrainsMono-Variable-Latin.woff2" | relURL }}" crossorigin />
   <link rel="stylesheet" href="{{ "css/fonts.css" | relURL }}" />
-  <link rel="preload" as="style" href="{{ "css/screen.css" | relURL }}" />
-  <link rel="stylesheet" href="{{ "css/screen.css" | relURL }}" />
+  <link rel="preload" as="style" href="{{ "css/screen.css" | relURL }}" onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript><link rel="stylesheet" href="{{ "css/screen.css" | relURL }}" /></noscript>
 {{- end -}}
 
 {{/* JSON-LD: BlogPosting only for individual posts in the "posts" section.

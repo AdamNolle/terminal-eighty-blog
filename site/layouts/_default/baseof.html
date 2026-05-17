@@ -45,18 +45,41 @@
   </div>
 </div>
 
+{{- /* Phase 11 — JS bundles served through Hugo's assets pipeline so
+       they're content-hashed (cache-busting + safe immutable caching)
+       and carry an SRI integrity attribute. Falls back to /static
+       paths only if a future drop removes the assets file (defensive
+       — should never happen in practice). */ -}}
+{{- $appJS := resources.Get "js/app.js" -}}
+{{- $lightboxJS := resources.Get "js/lightbox.js" -}}
+{{- $embedJS := resources.Get "js/embed-loader.js" -}}
+{{- if $appJS -}}
+  {{- $appJS = $appJS | resources.Fingerprint -}}
+<script type="module" src="{{ $appJS.RelPermalink }}" integrity="{{ $appJS.Data.Integrity }}"></script>
+{{- else -}}
 <script type="module" src="{{ "js/app.js" | relURL }}"></script>
+{{- end }}
 {{- /* Phase 6 image lightbox — hijacks [data-lightbox-src] +
        [data-gallery-href] clicks. Non-module so it runs in the
        jsdom test harness too. Defer = no parse-blocking. */ -}}
+{{- if $lightboxJS -}}
+  {{- $lightboxJS = $lightboxJS | resources.Fingerprint -}}
+<script src="{{ $lightboxJS.RelPermalink }}" integrity="{{ $lightboxJS.Data.Integrity }}" defer></script>
+{{- else -}}
 <script src="{{ "js/lightbox.js" | relURL }}" defer></script>
+{{- end }}
 {{- /* Phase 7 click-to-load embed handler — listens for clicks on
        [data-embed-href] placeholders and swaps in an iframe / script
        on activation. Non-module so it runs in the jsdom test harness
        and behind defer for non-blocking load. The selector is narrow
        (only [data-embed-href]); lightbox.js explicitly skips this
        same selector to keep the two systems orthogonal. */ -}}
+{{- if $embedJS -}}
+  {{- $embedJS = $embedJS | resources.Fingerprint -}}
+<script src="{{ $embedJS.RelPermalink }}" integrity="{{ $embedJS.Data.Integrity }}" defer></script>
+{{- else -}}
 <script src="{{ "js/embed-loader.js" | relURL }}" defer></script>
+{{- end }}
 {{ partial "analytics.html" . }}
 </body>
 </html>

@@ -20,7 +20,10 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, beforeEach, afterEach, describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const LOADER_JS = readFileSync(join(__dirname, '..', 'static', 'js', 'embed-loader.js'), 'utf-8');
+// Phase 11: canonical source path moved from static/ to assets/ so Hugo
+// can fingerprint + SRI through resources.Fingerprint. Test reads the
+// canonical file.
+const LOADER_JS = readFileSync(join(__dirname, '..', 'assets', 'js', 'embed-loader.js'), 'utf-8');
 
 beforeAll(() => {
   // Boot the IIFE exactly once per file — same pattern lightbox.test.js

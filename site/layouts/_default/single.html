@@ -48,10 +48,39 @@
   {{- /* Phase 5e: cover image, when set in front-matter. `cover_alt`
          feeds the alt text — required for accessibility. The image is
          purely decorative below the meta block; the same URL is also
-         emitted as og:image by head.html. */ -}}
+         emitted as og:image by head.html.
+
+         Phase 11: if `cover` resolves to a page resource (bundled
+         image under the post directory), run it through Hugo's image
+         pipeline to emit a responsive <picture> with width+height
+         (CLS=0). For plain absolute URLs (the common case today, where
+         the admin writes a /images/yyyy/mm/<file>.png path) we accept
+         optional `cover_width`/`cover_height` front-matter to keep the
+         no-CLS guarantee — the admin should set both whenever it
+         attaches a cover. If neither is present we still ship the
+         <img> with `loading=lazy decoding=async`; CLS may flicker
+         once but the page still renders. */ -}}
   {{- with .Params.cover -}}
+  {{- $cover := . -}}
+  {{- $coverRes := $.Resources.GetMatch (path.Base $cover) -}}
   <figure class="post-cover">
-    <img src="{{ . }}" alt="{{ $.Params.cover_alt | default $.Title }}" loading="lazy" decoding="async" />
+    {{- if $coverRes -}}
+      {{- $w320 := $coverRes.Resize "320x q82 webp" -}}
+      {{- $w640 := $coverRes.Resize "640x q82 webp" -}}
+      {{- $w1024 := $coverRes.Resize "1024x q82 webp" -}}
+      {{- $w1920 := $coverRes.Resize "1920x q82 webp" -}}
+      <picture>
+        <source type="image/webp" srcset="{{ $w320.RelPermalink }} 320w, {{ $w640.RelPermalink }} 640w, {{ $w1024.RelPermalink }} 1024w, {{ $w1920.RelPermalink }} 1920w" sizes="(max-width: 700px) 100vw, 1100px" />
+        <img src="{{ $w1024.RelPermalink }}" width="{{ $coverRes.Width }}" height="{{ $coverRes.Height }}" alt="{{ $.Params.cover_alt | default $.Title }}" loading="lazy" decoding="async" />
+      </picture>
+    {{- else -}}
+      <img src="{{ $cover }}"
+           {{ with $.Params.cover_width }}width="{{ . }}"{{ end }}
+           {{ with $.Params.cover_height }}height="{{ . }}"{{ end }}
+           alt="{{ $.Params.cover_alt | default $.Title }}"
+           loading="lazy"
+           decoding="async" />
+    {{- end -}}
     {{- with $.Params.cover_caption -}}
     <figcaption>{{ . }}</figcaption>
     {{- end -}}
