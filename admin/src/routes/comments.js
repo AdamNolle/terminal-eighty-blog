@@ -80,6 +80,7 @@ import { fileURLToPath } from 'url';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'fs';
 
 import * as remark42 from '../services/remark42.js';
+import * as bluesky from '../services/bluesky.js';
 import { register as sseRegister, broadcast as sseBroadcast } from '../services/sse.js';
 import { logActivity } from '../services/activity.js';
 
@@ -98,7 +99,9 @@ function db() {
   dbHandle = new Database(dbPath);
   dbHandle.pragma('journal_mode = WAL');
   // Safety net for direct-import tests (the migration runner is the
-  // primary creator).
+  // primary creator). Phase 9 added `bluesky_uri` — kept in sync with
+  // the schema in webmentions.js so direct-import tests don't need to
+  // run the migration runner first.
   dbHandle.exec(`
     CREATE TABLE IF NOT EXISTS webmentions (
       id TEXT PRIMARY KEY,
@@ -112,7 +115,8 @@ function db() {
       received_at INTEGER NOT NULL,
       validated_at INTEGER,
       status TEXT NOT NULL DEFAULT 'pending',
-      raw_html TEXT
+      raw_html TEXT,
+      bluesky_uri TEXT
     );
     CREATE TABLE IF NOT EXISTS blocks (
       id TEXT PRIMARY KEY,
@@ -126,6 +130,13 @@ function db() {
       UNIQUE(site_id, user_id)
     );
   `);
+  // Same idempotent ALTER as webmentions.js — covers test DBs that
+  // were created against an older schema.
+  try {
+    dbHandle.exec(`ALTER TABLE webmentions ADD COLUMN bluesky_uri TEXT`);
+  } catch (_) {
+    /* column already present — fine */
+  }
   return dbHandle;
 }
 
@@ -492,14 +503,57 @@ router.post('/:id/reply', async (req, res) => {
   const text = String(req.body?.text || '').trim();
   if (!text) return res.status(400).json({ error: 'text required' });
 
-  // Webmention rows can't be replied to from us — the reply belongs on
-  // the source site's thread (Mastodon, Bluesky…). Phase 9 will extend
-  // this to mirror the reply to the bluesky_uri.
-  const wm = db().prepare(`SELECT id, source FROM webmentions WHERE id = ?`).get(id);
+  // Webmention rows: if the source URL is a bsky.app post, Phase 9
+  // lets us mirror the admin reply to the Bluesky thread. Otherwise
+  // (Mastodon, generic Webmention) the reply belongs on the source
+  // site and we keep the 409.
+  const wm = db().prepare(`SELECT id, source, bluesky_uri FROM webmentions WHERE id = ?`).get(id);
   if (wm) {
+    if (wm.bluesky_uri && bluesky.isConfigured()) {
+      try {
+        const agent = await bluesky.signIn();
+        const reply = await bluesky.replyToPost(agent, wm.bluesky_uri, text);
+        logActivity({
+          req,
+          action: 'comment.reply.bluesky',
+          target: id,
+          meta: { parent: wm.bluesky_uri, reply: reply.uri },
+        });
+        sseBroadcast('comments', 'comment-replied', {
+          id,
+          replyId: reply.uri,
+          source: 'bluesky',
+        });
+        return res.status(201).json({
+          id,
+          source: 'bluesky',
+          parent: wm.bluesky_uri,
+          uri: reply.uri,
+          cid: reply.cid,
+        });
+      } catch (err) {
+        // Fall through to a 502 — the admin can retry once we know
+        // what's broken upstream. Don't leak credentials in the
+        // response body.
+        console.warn('[comments] bluesky reply mirror failed:', err && err.message);
+        return res.status(502).json({
+          error: 'bluesky_reply_failed',
+          hint: err && err.message,
+        });
+      }
+    }
+    if (wm.bluesky_uri && !bluesky.isConfigured()) {
+      return res.status(409).json({
+        error: 'cannot_reply_to_webmention',
+        hint: 'Bluesky cross-post is not configured (BLUESKY_HANDLE/BLUESKY_APP_PASSWORD).',
+      });
+    }
     return res.status(409).json({
       error: 'cannot_reply_to_webmention',
-      hint: 'Reply on the source site (' + wm.source + '). Phase 9 will cross-post via Bluesky.',
+      hint:
+        'Reply on the source site (' +
+        wm.source +
+        '). Only bsky.app webmentions can be mirrored from here.',
     });
   }
 

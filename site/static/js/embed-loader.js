@@ -44,6 +44,37 @@
   }
 
   /**
+   * Convert a bsky.app/profile/<handle>/post/<rkey> web URL into the
+   * official embed URL: https://embed.bsky.app/embed?uri=at://…
+   * Returns the original `webUrl` unchanged if parsing fails, so the
+   * iframe still loads something the user can interact with.
+   *
+   * The Hugo partial also writes `data-embed-uri` directly for the
+   * thread embed, so we prefer that when present.
+   *
+   * @param webUrl
+   * @param explicitAtUri
+   */
+  function bskyEmbedSrc(webUrl, explicitAtUri) {
+    if (explicitAtUri) {
+      return 'https://embed.bsky.app/embed?uri=' + encodeURIComponent(explicitAtUri);
+    }
+    if (!webUrl) return webUrl;
+    try {
+      var u = new URL(webUrl);
+      if (!/bsky\.app$/i.test(u.hostname)) return webUrl;
+      var parts = u.pathname.split('/').filter(Boolean);
+      // /profile/<handle>/post/<rkey>
+      if (parts.length < 4) return webUrl;
+      if (parts[0] !== 'profile' || parts[2] !== 'post') return webUrl;
+      var atUri = 'at://' + parts[1] + '/app.bsky.feed.post/' + parts[3];
+      return 'https://embed.bsky.app/embed?uri=' + encodeURIComponent(atUri);
+    } catch (_) {
+      return webUrl;
+    }
+  }
+
+  /**
    * Swap the placeholder for the heavy element. Returns the inserted
    * node so callers can move focus to it.
    * @param btn
@@ -61,9 +92,15 @@
     var inserted = null;
     var reduced = prefersReducedMotion();
 
-    if (type === 'iframe' || type === 'tiktok') {
+    if (type === 'iframe' || type === 'tiktok' || type === 'bluesky-thread') {
       var iframe = document.createElement('iframe');
-      iframe.setAttribute('src', href);
+      // bluesky-thread: the placeholder stores the web URL in
+      // data-embed-href (so the <noscript> fallback link is useful),
+      // and the AT URI in data-embed-uri. Convert to the official
+      // embed.bsky.app endpoint for the iframe src.
+      var src =
+        type === 'bluesky-thread' ? bskyEmbedSrc(href, btn.getAttribute('data-embed-uri')) : href;
+      iframe.setAttribute('src', src);
       // Locked-down iframe — no top-nav, no popups; allow scripts +
       // same-origin so YouTube/Vimeo/Bluesky players actually work,
       // and presentation for fullscreen video controls.
@@ -76,6 +113,12 @@
       var label = btn.getAttribute('aria-label');
       if (label) iframe.setAttribute('title', label.replace(/^(Play|Load)\s+/, ''));
       iframe.className = 'embed-frame';
+      if (type === 'bluesky-thread') {
+        iframe.className += ' embed-frame-bluesky-thread';
+        // Bluesky threads can be tall; let them grow rather than
+        // squashing into a 16:9 box.
+        iframe.style.minHeight = '600px';
+      }
       // Allow the parent figure's aspect-ratio CSS to size us; default
       // 16:9 for video and 4:5 for social embeds — themed by the
       // parent's `data-provider`.

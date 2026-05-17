@@ -164,6 +164,56 @@ describe('embed-loader vs lightbox (Phase 6 non-interference)', () => {
   });
 });
 
+describe('embed-loader bluesky-thread handler (Phase 9)', () => {
+  beforeEach(() => resetDom());
+  afterEach(() => resetDom());
+
+  it('swaps a Bluesky thread placeholder for the official embed iframe', () => {
+    document.body.innerHTML = `
+      <section class="bluesky-thread">
+        <button id="ph" type="button"
+                data-embed-href="https://bsky.app/profile/blog.terminaleighty.com/post/3kxyz"
+                data-embed-uri="at://blog.terminaleighty.com/app.bsky.feed.post/3kxyz"
+                data-embed-type="bluesky-thread"
+                aria-label="Load Bluesky thread discussion for this post">
+          View thread
+        </button>
+      </section>
+    `;
+    fireClick(document.getElementById('ph'));
+    const iframe = document.querySelector('iframe');
+    expect(iframe).toBeTruthy();
+    // Iframe src points at embed.bsky.app, NOT the original bsky.app URL.
+    expect(iframe.getAttribute('src')).toContain('https://embed.bsky.app/embed?uri=');
+    expect(iframe.getAttribute('src')).toContain(
+      encodeURIComponent('at://blog.terminaleighty.com/app.bsky.feed.post/3kxyz'),
+    );
+    // Sandbox + title still applied.
+    expect(iframe.getAttribute('sandbox')).toContain('allow-scripts');
+    expect(iframe.className).toContain('embed-frame-bluesky-thread');
+    // Accessible title derived from aria-label.
+    expect(iframe.getAttribute('title')).toBe('Bluesky thread discussion for this post');
+  });
+
+  it('derives embed URL from web href when no data-embed-uri provided', () => {
+    document.body.innerHTML = `
+      <section>
+        <button id="ph" type="button"
+                data-embed-href="https://bsky.app/profile/alice.bsky.social/post/abc"
+                data-embed-type="bluesky-thread"
+                aria-label="Load Bluesky thread">x</button>
+      </section>
+    `;
+    fireClick(document.getElementById('ph'));
+    const iframe = document.querySelector('iframe');
+    expect(iframe).toBeTruthy();
+    expect(iframe.getAttribute('src')).toContain('https://embed.bsky.app/embed?uri=');
+    expect(iframe.getAttribute('src')).toContain(
+      encodeURIComponent('at://alice.bsky.social/app.bsky.feed.post/abc'),
+    );
+  });
+});
+
 describe('embed-loader keyboard activation', () => {
   beforeEach(() => resetDom());
   afterEach(() => resetDom());

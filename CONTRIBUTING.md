@@ -839,6 +839,105 @@ doesn't store.
 ### Replies to webmentions
 
 `POST /api/comments/:id/reply` returns `409 cannot_reply_to_webmention`
-for webmention rows. Phase 9 (Bluesky cross-post) will extend this:
-when a webmention has a `bluesky_uri` recorded, the reply will be
-mirrored to the Bluesky thread so the conversation stays linked.
+for webmention rows that don't come from Bluesky. Phase 9 adds an
+exception: when the webmention's source is a `bsky.app` URL (which the
+receiver detects and stores in `bluesky_uri`), the admin reply is
+mirrored back to the Bluesky thread so the conversation stays linked.
+
+## Phase 9 — AT Protocol / Bluesky cross-post + thread embed
+
+Every time you hit **Publish** in the CMS, the admin now:
+
+1. Commits + pushes the post(s) as before.
+2. For each post that is newly published / updated and doesn't already
+   have a `bluesky_uri` in its front-matter, composes a Bluesky thread
+   (title + excerpt + link card) and posts it as the site account.
+3. Writes the resulting `at://` URI back to the post's front-matter
+   and pushes a follow-up commit (`Update Bluesky URIs (N posts)`).
+4. The post page now renders the official Bluesky embed (click-to-load
+   placeholder, same pattern as the embed-\* shortcodes) so replies
+   show up natively below the post — the conversation lives on
+   Bluesky, not in our DB.
+
+### Setup
+
+1. Generate an **app password** at
+   <https://bsky.app/settings/app-passwords>. This is REVOCABLE per-app
+   and can't change account settings — never paste the main account
+   password into `.env`.
+2. Add to `docker/.env`:
+
+   ```bash
+   BLUESKY_HANDLE=blog.terminaleighty.com
+   BLUESKY_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
+   ```
+
+3. Restart the admin container. The cross-post hook will fire on the
+   next publish; check the activity log (`/admin/#/activity`) for
+   `bluesky.crosspost` entries.
+
+### Idempotency model
+
+| Condition                                                         | Behaviour                                                                                     |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `BLUESKY_HANDLE` / `BLUESKY_APP_PASSWORD` unset                   | Skipped (no error). Hook logs `not_configured`.                                               |
+| Post has `draft: true`                                            | Skipped.                                                                                      |
+| Post already has `bluesky_uri` in front-matter                    | Skipped (`already_posted`). Edits do NOT re-post.                                             |
+| `date` is more than `BLUESKY_MAX_AGE_MS` (default 1h) in the past | Skipped (`too_old`). Stops content-only edits of historical posts from spamming the timeline. |
+| More than `BLUESKY_MAX_PER_RUN` (default 5) posts in one publish  | Excess skipped (`rate_limit`). Caps the blast radius of an accidental bulk-republish.         |
+
+The "substantial edit" question: we deliberately **don't** re-post on
+edits at all. Once `bluesky_uri` is set, the post is permanently
+linked to a single Bluesky thread. If you want a re-post (e.g. major
+rewrite), delete the `bluesky_uri` front-matter line and republish —
+the hook treats it as a fresh post. The previous BSky thread is left
+in place; you can delete it manually if desired.
+
+### Thread composition
+
+The cross-post text is:
+
+```text
+<title>
+
+<excerpt — from front-matter `description`, else auto-extracted from
+the post body, stripped of headings / code / link syntax>
+
+<post URL>
+```
+
+An `app.bsky.embed.external` link card carries the title + excerpt +
+cover image so the in-app preview renders rich. If the title +
+excerpt + URL together exceed 300 chars, the excerpt is split across
+continuation reply posts numbered `(2/N)`, `(3/N)`, … chained off the
+root via `reply.root` / `reply.parent`. We cap the chain at 4 posts
+total.
+
+### Comments mirror
+
+`POST /api/comments/:id/reply` now mirrors to Bluesky when the
+webmention row has `bluesky_uri` set. The receiver detects bsky.app
+source URLs (Bridgy Fed forwards them as webmentions) at insert time
+and captures the AT URI then; no later lookup needed.
+
+If credentials aren't configured, the route returns
+`409 cannot_reply_to_webmention` with a clearer hint pointing at the
+missing env vars. Non-Bluesky webmentions (Mastodon, generic) still
+get the original 409 (reply on the source site).
+
+### Migration
+
+A new migration (`008_webmention_bluesky.sql`) adds the
+`bluesky_uri TEXT` column to the `webmentions` table. The migration
+runner picks it up at server boot — no manual step needed for fresh
+installs. The test-only safety net in `routes/webmentions.js` and
+`routes/comments.js` also ALTERs old direct-import test DBs to add
+the column.
+
+### Privacy / Lighthouse
+
+The thread embed is a **click-to-load** placeholder — no Bluesky
+trackers fire for drive-by readers. Only when a reader clicks "View
+thread on Bluesky" do we inject the official `embed.bsky.app` iframe
+(sandboxed, lazy-loaded, focus moves to the iframe so keyboard users
+land in the thread).
