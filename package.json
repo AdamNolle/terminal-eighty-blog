@@ -5,7 +5,7 @@
   "description": "Terminal Eighty — self-hosted Hugo blog + Node admin CMS. This root package orchestrates lint, test, and CI for the whole monorepo.",
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "lint": "npm-run-all --aggregate-output --continue-on-error --parallel lint:js lint:css lint:md lint:prettier lint:types lint:html-admin",
@@ -18,7 +18,7 @@
     "lint:prettier:fix": "prettier --write \"**/*.{js,css,json,md}\" --ignore-path .prettierignore",
     "lint:types": "tsc --noEmit -p tsconfig.json",
     "lint:html-admin": "htmlhint --config .htmlhintrc \"admin/public/*.html\"",
-    "lint:html-site": "htmlhint --config .htmlhintrc \"site/public/**/*.html\"",
+    "lint:html-site": "htmlhint --config .htmlhintrc.site \"site/public/**/*.html\"",
     "lint:shell": "shellcheck scripts/*.sh || echo 'shellcheck not installed locally — runs in CI'",
     "fix": "npm-run-all --sequential lint:prettier:fix lint:js:fix lint:css:fix",
     "test": "npm-run-all --continue-on-error --sequential test:site test:admin",
