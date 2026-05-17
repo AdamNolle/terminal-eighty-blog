@@ -465,6 +465,45 @@ convention is:
 Keep these comments at the top of new shortcode templates so they show
 up in the admin reference automatically.
 
+### Attachments (Phase 6)
+
+Embed any uploaded file with a rich preview using the `attachment`
+shortcode:
+
+```markdown
+{{< attachment id="abc123" >}}
+{{< attachment id="abc123" caption="My caption" >}}
+```
+
+The `id` is the media-library id (visible in `admin/#/media`).
+At publish time, `admin/src/services/publish-media-data.js` writes
+`site/data/media.json` with every media record's metadata + conversion
+URLs. The shortcode looks the id up there and dispatches to a per-type
+partial in `site/layouts/partials/attachment-*.html`:
+
+- `image/*` → responsive `<picture>` (AVIF + WebP + fallback) with
+  click-to-lightbox
+- `video/*` → `<video controls>` with H.264 MP4 + VP9 WebM sources
+- `audio/*` → waveform image + `<audio controls>` with MP3 + Opus
+- `application/pdf` → cover thumb + page count + Open + Download
+- code files → pre-rendered Shiki HTML + language badge
+- archives → collapsible `<details>` file tree
+- anything else → generic file card with byte size + Download
+
+Every preview offers a **Download original** link with the
+`download="<original-filename>"` attribute — GitHub Pages does not
+support `Content-Disposition` headers, so the attribute is how we hint
+the browser to use the original filename when saving.
+
+The editor's slash menu's **File attachment** entry opens the media
+library, lets you pick or upload a file, and inserts the shortcode at
+the cursor. Drag-drop of non-image files into the editor body does the
+same (image drops still use TipTap's native image node).
+
+Image clicks (and gallery items from the `gallery` shortcode) open
+`site/static/js/lightbox.js`, a tiny vanilla overlay with focus trap,
+arrow-key navigation, and ESC/backdrop close.
+
 ### Activity log
 
 Every CMS mutation writes a row to the `activity_log` SQLite table

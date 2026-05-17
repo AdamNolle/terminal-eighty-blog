@@ -65825,12 +65825,15 @@ ${prefix}
     {
       id: "file",
       label: "File attachment",
-      hint: "Upload file (Phase 6)",
+      hint: "Insert any file with rich preview",
       group: "Insert",
-      keywords: ["file", "attachment", "upload"],
-      placeholder: true,
+      keywords: ["file", "attachment", "upload", "pdf", "video", "audio", "zip"],
       run: (editor, range) => {
         editor.chain().focus().deleteRange(range).run();
+        try {
+          editor.view.dom.dispatchEvent(new CustomEvent("te-slash-attachment", { bubbles: true }));
+        } catch (_) {
+        }
       }
     },
     {

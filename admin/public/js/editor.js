@@ -683,12 +683,23 @@
     });
   }
 
-  function insertMediaIntoEditor(item) {
+  function insertMediaIntoEditor(item, opts) {
     if (!item || !item.url) return;
+    opts = opts || {};
     const isImage = (item.type || (item.mime_type || '').split('/')[0]) === 'image';
+    // Phase 6: prefer the `attachment` shortcode for any file with an
+    // id. The shortcode hits site.Data.media at build time and renders
+    // a rich per-type preview. We still fall back to a plain markdown
+    // image for the `forceImage` path so the editor keeps working if a
+    // legacy caller skips the media library.
+    const forceImage = opts.forceImage === true;
+    const useShortcode = !forceImage && item.id;
     const tt = bodyEl && bodyEl._tiptap;
     if (tt && tt.chain) {
-      if (isImage) {
+      if (useShortcode) {
+        const shortcode = `{{< attachment id="${item.id}" >}}`;
+        tt.chain().focus().insertContent(`\n\n${shortcode}\n\n`).run();
+      } else if (isImage) {
         tt.chain()
           .focus()
           .setImage({ src: item.url, alt: item.original_name || '' })
@@ -701,10 +712,15 @@
       updateMetrics();
       return;
     }
-    // Fallback textarea — splice markdown at the cursor.
-    const md = isImage
-      ? `\n![${item.original_name || ''}](${item.url})\n`
-      : `\n[File: ${item.original_name || item.filename}](${item.url})\n`;
+    // Fallback textarea — splice markdown / shortcode at the cursor.
+    let md;
+    if (useShortcode) {
+      md = `\n\n{{< attachment id="${item.id}" >}}\n\n`;
+    } else if (isImage) {
+      md = `\n![${item.original_name || ''}](${item.url})\n`;
+    } else {
+      md = `\n[File: ${item.original_name || item.filename}](${item.url})\n`;
+    }
     const start = bodyEl.selectionStart || 0;
     const end = bodyEl.selectionEnd || 0;
     bodyEl.value = bodyEl.value.slice(0, start) + md + bodyEl.value.slice(end);
@@ -847,6 +863,15 @@
       // open the existing sidebar uploader's file picker (Phase 4 will
       // replace with a proper media browser).
       editorRoot.addEventListener('te-slash-image', () => {
+        const input = document.getElementById('ed-file-input');
+        if (input && typeof input.click === 'function') input.click();
+      });
+      // Phase 6: the slash menu's "File attachment" entry routes here.
+      // We reuse the same file picker the image flow uses — the upload
+      // handler is content-agnostic — and the success callback inserts
+      // an `{{< attachment id="..." >}}` shortcode. If the page hosts a
+      // proper media-library modal in future, swap this for `openLibrary()`.
+      editorRoot.addEventListener('te-slash-attachment', () => {
         const input = document.getElementById('ed-file-input');
         if (input && typeof input.click === 'function') input.click();
       });
