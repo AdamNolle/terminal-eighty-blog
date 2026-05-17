@@ -736,10 +736,109 @@ remote profile MUST link back to `terminaleighty.com` (any `rel="me"`
 or plain `<a href>`) for the verification loop to close — Bridgy Fed
 won't trust an unverified social identity.
 
-### Future Phase 8.5 — comment moderation UI
+## Phase 8.5 — unified comment moderation
 
-The admin moderation endpoints (`/api/webmentions/:id/{approve,reject}`)
-land in Phase 8 with no UI. Phase 8.5 will surface them inside the
-existing admin shell, alongside (or unified with) the Remark42
-comment-moderation flow — likely as a new tab under `/api/comments`
-that proxies Remark42's REST surface plus our `webmentions` table.
+The CMS now manages every comment from one screen. You should never
+need to log into Remark42's web UI again.
+
+### What's on the page
+
+`/admin/#/comments` (sidebar → Comments) shows:
+
+| Tab              | Source                                 | Notes                             |
+| ---------------- | -------------------------------------- | --------------------------------- |
+| All              | Remark42 + webmentions                 | newest first, paginated           |
+| Visible          | Remark42                               | comments currently shown publicly |
+| Pinned           | Remark42 admin pins                    |                                   |
+| Pending mentions | Webmentions w/ `status='pending'`      | approve / reject inline           |
+| Spam             | Remark42 soft-deleted + author blocked |                                   |
+| Deleted          | Remark42 soft-deleted                  |                                   |
+| Blocked          | Local mirror of Remark42 block list    | unblock via row button            |
+
+Row click opens a drawer with the full body, post link, original
+source (for webmentions), and a reply composer (Markdown, Cmd+Enter to
+send). Bulk checkboxes drive the bottom action bar: **Approve**,
+**Mark spam**, **Delete**.
+
+### Live updates
+
+The page opens an `EventSource` on `/api/comments/stream`. Two events:
+
+- `comment-new` — fired by the Remark42 poller (every 30s) when it
+  spots a new comment.
+- `webmention-new` — fired the instant a webmention POST lands.
+
+A `ping` heartbeat keeps the connection alive through Cloudflare
+Tunnel and Caddy. The sidebar shows a **green dot** when live, **red**
+when the stream drops, and the Comments badge bumps each time a new
+event arrives (resets when you open the page).
+
+### Server-side env vars
+
+Add these to `.env` (and the production secrets file):
+
+```bash
+# Remark42 admin proxy
+REMARK42_URL=http://remark42:8080         # internal Docker hostname
+REMARK42_SITE_ID=terminaleighty
+REMARK42_SECRET=<same as the Remark42 container's SECRET>
+REMARK42_ADMIN_USER=admin
+REMARK42_ADMIN_ID=admin
+
+# Polling cadence (default 30s)
+REMARK42_POLL_MS=30000
+
+# Turn the poller off (e.g. on a dev box without docker up):
+# REMARK42_POLLER=off
+```
+
+`REMARK42_SECRET` is the same `SECRET` env var the Remark42 container
+already uses (see `docker/docker-compose.yml`). The admin process
+mints a short-lived HS256 JWT with `user.admin: true` per write call —
+the admin user themselves never sees the secret.
+
+### Optional email digest
+
+If you want a periodic email summary of new comments + webmentions,
+install nodemailer in the admin and set the SMTP env vars:
+
+```bash
+cd admin && npm install nodemailer
+```
+
+```bash
+# .env additions
+SMTP_HOST=smtp.fastmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=robot@example.com
+SMTP_PASS=<app-password>
+SMTP_FROM="Terminal Eighty <robot@example.com>"
+DIGEST_TO=adam@example.com
+DIGEST_WINDOW_MS=3600000     # last hour
+```
+
+Then add the cron:
+
+```cron
+5 * * * * cd /opt/terminal-eighty && node scripts/email-digest.mjs >>/var/log/t80-digest.log 2>&1
+```
+
+Or rely on `scripts/maintenance.sh` (which already calls
+`email-digest.mjs` and no-ops when SMTP isn't configured).
+
+### Block-list reconciliation
+
+`GET /api/comments/blocks` reconciles against Remark42's
+`/api/v1/admin/blocked` on every load, so out-of-band changes — e.g.
+the day you log directly into Remark42's UI to clear a single user —
+eventually converge into the local `blocks` table. The local row also
+records `reason` and `created_by` (admin username), which Remark42
+doesn't store.
+
+### Replies to webmentions
+
+`POST /api/comments/:id/reply` returns `409 cannot_reply_to_webmention`
+for webmention rows. Phase 9 (Bluesky cross-post) will extend this:
+when a webmention has a `bluesky_uri` recorded, the reply will be
+mirrored to the Bluesky thread so the conversation stays linked.

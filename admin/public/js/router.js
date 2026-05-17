@@ -32,6 +32,7 @@
     activity: 'view-activity',
     shortcodes: 'view-shortcodes',
     settings: 'view-settings',
+    comments: 'view-comments',
   };
 
   function currentRoute() {
@@ -88,6 +89,8 @@
         return 'Shortcodes';
       case 'settings':
         return 'Settings';
+      case 'comments':
+        return 'Comments';
       default:
         return 'Dashboard';
     }
