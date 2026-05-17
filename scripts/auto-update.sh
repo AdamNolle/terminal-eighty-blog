@@ -17,7 +17,8 @@ git fetch origin main
 
 # Check if local matches remote
 LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse @{u})
+# shellcheck disable=SC1083 # `@{u}` is git's upstream-ref syntax, not brace expansion
+REMOTE=$(git rev-parse '@{u}')
 
 if [ "$LOCAL" != "$REMOTE" ]; then
     echo "$(date): Updates found. Pulling latest code..."
