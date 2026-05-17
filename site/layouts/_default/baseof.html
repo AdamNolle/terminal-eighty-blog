@@ -40,6 +40,10 @@
 </div>
 
 <script type="module" src="{{ "js/app.js" | relURL }}"></script>
+{{- /* Phase 6 image lightbox — hijacks [data-lightbox-src] +
+       [data-gallery-href] clicks. Non-module so it runs in the
+       jsdom test harness too. Defer = no parse-blocking. */ -}}
+<script src="{{ "js/lightbox.js" | relURL }}" defer></script>
 {{ partial "analytics.html" . }}
 </body>
 </html>

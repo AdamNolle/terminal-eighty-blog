@@ -872,12 +872,21 @@ const SLASH_ITEMS = [
   {
     id: 'file',
     label: 'File attachment',
-    hint: 'Upload file (Phase 6)',
+    hint: 'Insert any file with rich preview',
     group: 'Insert',
-    keywords: ['file', 'attachment', 'upload'],
-    placeholder: true,
+    keywords: ['file', 'attachment', 'upload', 'pdf', 'video', 'audio', 'zip'],
     run: (editor, range) => {
       editor.chain().focus().deleteRange(range).run();
+      // Phase 6: dispatch a DOM event so editor.js can open the media
+      // library and insert an `{{< attachment id="..." >}}` shortcode on
+      // selection. Keeping the dispatch here (instead of doing it inline)
+      // mirrors the `te-slash-image` pattern and avoids re-importing the
+      // media client into the bundle.
+      try {
+        editor.view.dom.dispatchEvent(new CustomEvent('te-slash-attachment', { bubbles: true }));
+      } catch (_) {
+        /* ignore */
+      }
     },
   },
   {
