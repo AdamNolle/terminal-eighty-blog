@@ -53,7 +53,7 @@
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.0.9",
     "prosemirror-markdown": "^1.13.4",
-    "prosemirror-model": "^1.25.6",
+    "prosemirror-model": "^1.25.7",
     "sharp": "^0.34.5",
     "shiki": "^4.0.2",
     "simple-git": "^3.27.0",
