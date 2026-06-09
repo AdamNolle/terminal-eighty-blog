@@ -45,7 +45,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Cache Hugo modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ runner.temp }}/hugo_cache
           key: hugo-deploy-${{ runner.os }}-${{ hashFiles('site/hugo.toml') }}
